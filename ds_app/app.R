@@ -7,11 +7,7 @@ ui <- fluidPage(
   titlePanel("Hello Shiny!"),
 
   # Sidebar layout with input and output definitions ----
-  sidebarLayout(
-
-    # Sidebar panel for inputs ----
-    sidebarPanel(
-
+  sidebarLayout( # Sidebar panel for inputs ---- sidebarPanel(
       # Input: Slider for the number of bins ----
       sliderInput(inputId = "bins",
                   label = "Number of bins:",
@@ -56,3 +52,11 @@ server <- function(input, output) {
 
 shinyApp(ui = ui, server = server)
 
+
+koehler
+industry
+elflord
+torte
+gruvbox
+slate
+hubumax
