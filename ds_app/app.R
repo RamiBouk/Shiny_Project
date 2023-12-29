@@ -1,5 +1,5 @@
 # Installation des packages nécessaires
-packages_to_install <- c("shiny","shinyjs", "ggplot2", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot")
+packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot")
 
 # Installation des packages s'ils ne sont pas déjà installés
 for (package in packages_to_install) {
@@ -12,6 +12,7 @@ for (package in packages_to_install) {
 library(shiny)
 library(ggplot2)
 library(dplyr)
+library(editData)
 library(randomForest)
 library(caret)
 library(DT)
@@ -26,6 +27,14 @@ ui <- navbarPage(
   title = "Analyse de Données Avancée",
   
   # Catégorie Principale: Data Loading & Processing
+  withTags(
+    header(
+      script(HTML(
+       "document.documentElement.style.setProperty('--dt-row-selected', '#a6b4cd');
+        document.documentElement.style.setProperty('--dt-row-selected-text', '#333');"
+       ))  
+    )
+  ),
   tabPanel("Data Loading & Processing",
            sidebarLayout(
              sidebarPanel(
@@ -202,7 +211,7 @@ server <- function(input, output, session) {
   output$dataTable <- renderDT({
     df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
-    datatable(df)
+    datatable(df,editable="cell",selection='single')
   })
   
   # Génération des graphiques unidimensionnels
