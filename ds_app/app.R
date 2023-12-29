@@ -1,5 +1,5 @@
 # Installation des packages nécessaires
-packages_to_install <- c("shiny", "ggplot2", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot")
+packages_to_install <- c("shiny","shinyjs", "ggplot2", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot")
 
 # Installation des packages s'ils ne sont pas déjà installés
 for (package in packages_to_install) {
@@ -15,12 +15,14 @@ library(dplyr)
 library(randomForest)
 library(caret)
 library(DT)
+library(shinyjs)
 library(shinythemes)
 library(ggcorrplot)
 
 # Définition de l'interface utilisateur
 ui <- navbarPage(
   theme = shinytheme("cerulean"),
+  shinyjs::useShinyjs(),  # Initialize shinyjs
   title = "Analyse de Données Avancée",
   
   # Catégorie Principale: Data Loading & Processing
@@ -31,27 +33,36 @@ ui <- navbarPage(
                fileInput("file1", "Choisir un fichier CSV"),
                actionButton("load", "Charger les Données"),
                hr(),
-               
-               # Section pour le prétraitement des données
                conditionalPanel(
-                condition = "output.dataLoaded",
-                h3("Prétraitement"),
-                uiOutput("varOptionsUI"),
-               
-                h4("Traitement des Variables Qualitatives"),
-                checkboxInput("manageQualitative", "Gérer les Variables Qualitatives", value = FALSE),
-               
-               h4("Gestion des Outliers"),
-               checkboxInput("manageOutliers", "Identifier et Gérer les Outliers", value = FALSE),
-               numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1),
-               
-               h4("Valeurs Manquantes"),
-               radioButtons("missingValues", "Gestion des Valeurs Manquantes",
-                            choices = c("Aucune", "Imputation", "Suppression"),
-                            selected = "Aucune"),
-               actionButton("preprocess", "Appliquer le Prétraitement")
+               condition = "output.dataLoaded",
+                tabPanel("Preprocessing",
+               # Sub-tab panel for preprocessing options
+               tabsetPanel(
+                 tabPanel("Variables Options",
+                          h3("Prétraitement"),
+                          uiOutput("varOptionsUI")
+                 ),
+                 tabPanel("Variables Qualitatives",
+                          h4("Traitement des Variables Qualitatives"),
+                          checkboxInput("manageQualitative", "Gérer les Variables Qualitatives", value = FALSE)
+                 ),
+                 tabPanel("Gestion des Outliers",
+                          h4("Gestion des Outliers"),
+                          checkboxInput("manageOutliers", "Identifier et Gérer les Outliers", value = FALSE),
+                          numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1)
+                 ),
+                 tabPanel("Valeurs Manquantes",
+                          h4("Valeurs Manquantes"),
+                          radioButtons("missingValues", "Gestion des Valeurs Manquantes",
+                                       choices = c("Aucune", "Imputation", "Suppression"),
+                                       selected = "Aucune"),
+                 )
                )
              ),
+                          actionButton("preprocess", "Appliquer le Prétraitement")
+
+
+                                )),
              mainPanel(
                h3("Résumé des Données"),
                verbatimTextOutput("dataSummary")  # Ajout pour afficher le résumé des données
@@ -96,6 +107,13 @@ server <- function(input, output, session) {
   # Valeurs réactives pour les données brutes et prétraitées
   rawData <- reactiveVal()
   processedData <- reactiveVal(NULL)
+  observe({
+    if (is.null(input$file1)) {
+      shinyjs::disable("load")
+    }else{
+      shinyjs::enable("load")
+    }
+  })
   
   output$dataLoaded<-reactive({
     !is.null(rawData()) 
