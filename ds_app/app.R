@@ -31,26 +31,25 @@ ui <- navbarPage(
                fileInput("file1", "Choisir un fichier CSV"),
                actionButton("load", "Charger les Données"),
                hr(),
-               h3("Prétraitement"),
-               checkboxInput("enablePreprocess", "Activer le Prétraitement", value = FALSE),
-               uiOutput("varOptionsUI"),
                
                # Section pour le prétraitement des données
                conditionalPanel(
-                 condition = "input.enablePreprocess == true",
-                 
-                 h4("Traitement des Variables Qualitatives"),
-                 checkboxInput("manageQualitative", "Gérer les Variables Qualitatives", value = FALSE),
-                 
-                 h4("Gestion des Outliers"),
-                 checkboxInput("manageOutliers", "Identifier et Gérer les Outliers", value = FALSE),
-                 numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1),
-                 
-                 h4("Valeurs Manquantes"),
-                 radioButtons("missingValues", "Gestion des Valeurs Manquantes",
-                              choices = c("Aucune", "Imputation", "Suppression"),
-                              selected = "Aucune"),
-                 actionButton("preprocess", "Appliquer le Prétraitement")
+                condition = "input.load > 0",
+                h3("Prétraitement"),
+                uiOutput("varOptionsUI"),
+               
+                h4("Traitement des Variables Qualitatives"),
+                checkboxInput("manageQualitative", "Gérer les Variables Qualitatives", value = FALSE),
+               
+               h4("Gestion des Outliers"),
+               checkboxInput("manageOutliers", "Identifier et Gérer les Outliers", value = FALSE),
+               numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1),
+               
+               h4("Valeurs Manquantes"),
+               radioButtons("missingValues", "Gestion des Valeurs Manquantes",
+                            choices = c("Aucune", "Imputation", "Suppression"),
+                            selected = "Aucune"),
+               actionButton("preprocess", "Appliquer le Prétraitement")
                )
              ),
              mainPanel(
@@ -120,10 +119,8 @@ server <- function(input, output, session) {
   
   # Génération des options de prétraitement
   output$varOptionsUI <- renderUI({
-    if (!input$enablePreprocess) return(NULL)
-    df <- rawData()
     if (is.null(df)) return(NULL)
-    
+    df <- rawData()
     varTypes <- sapply(df, class)
     uiList <- lapply(names(df), function(var) {
       if(varTypes[var] == "factor") {
@@ -176,14 +173,14 @@ server <- function(input, output, session) {
   
   # Affichage des données prétraitées ou brutes
   output$dataTable <- renderDT({
-    df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
+    df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
     datatable(df)
   })
   
   # Génération des graphiques unidimensionnels
   output$unidimPlot <- renderPlot({
-    df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
+    df <- if ( !is.null(processedData())) processedData() else rawData()
     req(df)
     ggplot(df, aes_string(x = input$selectVar)) + 
       geom_histogram(binwidth = 1) + theme_minimal() + ggtitle(paste("Histogramme :", input$selectVar)) + 
@@ -192,7 +189,7 @@ server <- function(input, output, session) {
   
   # Génération des graphiques bidimensionnels avec indicateur de corrélation
   output$bidimPlot <- renderPlot({
-    df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
+    df <- if ( !is.null(processedData())) processedData() else rawData()
     req(df)
     
     if (is.numeric(df[[input$selectVar]]) && is.numeric(df[[input$selectVar2]])) {
@@ -212,7 +209,7 @@ server <- function(input, output, session) {
   
   # Génération du Box Plot
   output$boxPlot <- renderPlot({
-    df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
+    df <- if ( !is.null(processedData())) processedData() else rawData()
     req(df)
     
     if (is.numeric(df[[input$selectVar]])) {
@@ -229,7 +226,7 @@ server <- function(input, output, session) {
   
     # Génération du graphique de matrice de corrélation
   output$corrPlot <- renderPlot({
-    df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
+    df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
 
     # Sélectionner uniquement les colonnes numériques
