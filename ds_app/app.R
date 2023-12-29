@@ -34,7 +34,7 @@ ui <- navbarPage(
                
                # Section pour le prétraitement des données
                conditionalPanel(
-                condition = "input.load > 0",
+                condition = "output.dataLoaded",
                 h3("Prétraitement"),
                 uiOutput("varOptionsUI"),
                
@@ -97,6 +97,10 @@ server <- function(input, output, session) {
   rawData <- reactiveVal()
   processedData <- reactiveVal(NULL)
   
+  output$dataLoaded<-reactive({
+    !is.null(rawData()) 
+  })
+  outputOptions(output,"dataLoaded",suspendWhenHidden=FALSE)
   # Chargement et mise à jour de l'UI pour les données
   observeEvent(input$load, {
     inFile <- input$file1
