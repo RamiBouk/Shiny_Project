@@ -109,10 +109,15 @@ server <- function(input, output, session) {
   
   # Affichage du résumé des données chargées
   output$dataSummary <- renderPrint({
-    df <- rawData()  # Utiliser la variable réactive contenant les données chargées
-    if (!is.null(df)) {
-      summary(df)
-    } else {
+    # Utiliser la variable réactive contenant les données chargées
+    if (!is.null(rawData())) {
+      print("Raw Data")
+      print(summary(rawData()))
+      if(!is.null(processedData())){
+        print("Processed Data")
+        print(summary(processedData()))
+    }}
+    else {
       "Aucune donnée chargée."
     }
   })
@@ -226,7 +231,7 @@ server <- function(input, output, session) {
   
     # Génération du graphique de matrice de corrélation
   output$corrPlot <- renderPlot({
-    df <- if (!is.null(processedData())) processedData() else rawData()
+    df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
     req(df)
 
     # Sélectionner uniquement les colonnes numériques
