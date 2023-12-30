@@ -35,35 +35,66 @@ ui <- navbarPage(
        ))  
     )
   ),
-  tabPanel("Data Loading & Processing",
+  tabPanel("Data Loading & Overview",
            sidebarLayout(
              sidebarPanel(
                h3("Chargement des Données"),
                fileInput("file1", "Choisir un fichier CSV"),
                actionButton("load", "Charger les Données"),
-               hr()),
+               ),
              mainPanel(
-               h3("Résumé des Données"),
-               verbatimTextOutput("dataSummary"),
+                 # Ajout pour afficher le résumé des données
                conditionalPanel(
                condition = "output.dataLoaded",
+
+                tabPanel("",
+               # Sub-tab panel for preprocessing options
+               tabsetPanel(
+                 tabPanel("Data Table",
+               h6("Click to edit Table"),
+               DTOutput("dataTable"),
+                 ),
+                 tabPanel("Data Summary",
+               verbatimTextOutput("dataSummary"),
+                 )))),
+
+             )
+           )
+  ),
+  
+  # Catégorie Principale: Data Overview
+  tabPanel("Data Preprocessing",
+           sidebarLayout(
+             sidebarPanel(
+               selectizeInput("selectVar", "Variable Unidimensionnelle", choices = NULL),
+               selectizeInput("selectVar2", "Variable Bidimensionnelle", choices = NULL),
+               tabsetPanel(
+                 tabPanel("Unidimensionnelle", plotOutput("unidimPlot"), plotOutput("boxPlot")),
+                 tabPanel("Bidimensionnelle", plotOutput("bidimPlot")),
+                 #tabPanel("Corrélation", plotOutput("corrPlot"))
+               )
+               ),
+              mainPanel(
+               conditionalPanel(
+               condition = "output.dataLoaded",
+
                 tabPanel("Preprocessing",
                # Sub-tab panel for preprocessing options
                tabsetPanel(
-                 tabPanel("Variables Options",
-                          h3("Prétraitement"),
+                 tabPanel("Normalization",
+                          h3("Select Columns"),
                           uiOutput("varOptionsUI")
                  ),
-                 tabPanel("Variables Qualitatives",
+                 tabPanel("Dummification",
                           h4("Traitement des Variables Qualitatives"),
                           checkboxInput("manageQualitative", "Gérer les Variables Qualitatives", value = FALSE)
                  ),
-                 tabPanel("Gestion des Outliers",
+                 tabPanel("Outliers",
                           h4("Gestion des Outliers"),
                           checkboxInput("manageOutliers", "Identifier et Gérer les Outliers", value = FALSE),
                           numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1)
                  ),
-                 tabPanel("Valeurs Manquantes",
+                 tabPanel("Missing Values",
                           h4("Valeurs Manquantes"),
                           radioButtons("missingValues", "Gestion des Valeurs Manquantes",
                                        choices = c("Aucune", "Imputation", "Suppression"),
@@ -74,37 +105,19 @@ ui <- navbarPage(
                           actionButton("preprocess", "Appliquer")
 
 
-                                )  # Ajout pour afficher le résumé des données
-             )
-           )
-  ),
-  
-  # Catégorie Principale: Data Overview
-  tabPanel("Data Overview",
-           mainPanel(
-             tabPanel("Aperçu des Données", 
-                      DTOutput("dataTable")
-             )
-           )
+                                ))),
   ),
   
   # Catégorie Principale: Analyse EDA
-  tabPanel("Analyse EDA",
-           sidebarLayout(
-             sidebarPanel(
-               h3("Paramètres d'Analyse"),
-               selectizeInput("selectVar", "Variable Unidimensionnelle", choices = NULL),
-               selectizeInput("selectVar2", "Variable Bidimensionnelle", choices = NULL)
-             ),
-             mainPanel(
-               navlistPanel(
-                 tabPanel("Analyse Unidimensionnelle", plotOutput("unidimPlot"), plotOutput("boxPlot")),
-                 tabPanel("Analyse Bidimensionnelle", plotOutput("bidimPlot")),
-                 tabPanel("Corrélation", plotOutput("corrPlot"))
-               )
-             )
-           )
-  ),
+  #tabPanel("Analyse EDA",
+  #         sidebarLayout(
+  #           sidebarPanel(
+  #             h3("Paramètres d'Analyse"),
+  #           ),
+  #           mainPanel(
+  #           )
+  #         )
+  #),
   
   # Catégorie Principale: Entraînement et évaluation des modèles ML
   tabPanel("Entraînement et évaluation des modèles ML"
@@ -211,9 +224,24 @@ server <- function(input, output, session) {
   
   # Affichage des données prétraitées ou brutes
   output$dataTable <- renderDT({
-    df <- if (!is.null(processedData())) processedData() else rawData()
+    if (!is.null(processedData())) 
+    {
+      df<- processedData()}
+    else if (!is.null(rawData())){
+      df<-rawData()
+    }
+    else 
+      return() 
     req(df)
-    datatable(df,editable="cell",selection='single')
+
+    datatable(df,editable="cell",
+              options = list(scrollY = 650,
+                               scrollX = 500,
+                               deferRender = TRUE,
+                               scroller = TRUE,
+                               buttons = list('excel',
+                                              list(extend = 'colvis', targets = 0, visible = FALSE)),
+                               fixedColumns = TRUE),selection='single')
   })
   
   # Génération des graphiques unidimensionnels
