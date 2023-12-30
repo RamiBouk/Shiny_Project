@@ -41,7 +41,10 @@ ui <- navbarPage(
                h3("Chargement des Données"),
                fileInput("file1", "Choisir un fichier CSV"),
                actionButton("load", "Charger les Données"),
-               hr(),
+               hr()),
+             mainPanel(
+               h3("Résumé des Données"),
+               verbatimTextOutput("dataSummary"),
                conditionalPanel(
                condition = "output.dataLoaded",
                 tabPanel("Preprocessing",
@@ -68,13 +71,10 @@ ui <- navbarPage(
                  )
                )
              ),
-                          actionButton("preprocess", "Appliquer le Prétraitement")
+                          actionButton("preprocess", "Appliquer")
 
 
-                                )),
-             mainPanel(
-               h3("Résumé des Données"),
-               verbatimTextOutput("dataSummary")  # Ajout pour afficher le résumé des données
+                                )  # Ajout pour afficher le résumé des données
              )
            )
   ),
@@ -82,7 +82,9 @@ ui <- navbarPage(
   # Catégorie Principale: Data Overview
   tabPanel("Data Overview",
            mainPanel(
-             tabPanel("Aperçu des Données", DTOutput("dataTable"))
+             tabPanel("Aperçu des Données", 
+                      DTOutput("dataTable")
+             )
            )
   ),
   
@@ -116,6 +118,7 @@ server <- function(input, output, session) {
   # Valeurs réactives pour les données brutes et prétraitées
   rawData <- reactiveVal()
   processedData <- reactiveVal(NULL)
+  # React to data being loaded
   observe({
     if (is.null(input$file1)) {
       shinyjs::disable("load")
@@ -123,7 +126,6 @@ server <- function(input, output, session) {
       shinyjs::enable("load")
     }
   })
-  
   output$dataLoaded<-reactive({
     !is.null(rawData()) 
   })
