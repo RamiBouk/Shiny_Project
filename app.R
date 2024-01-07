@@ -3,7 +3,8 @@
 ## - fix normalize constant columns
 
 # Installation des packages nécessaires
-packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot", "e1071", "caret", "randomForest", "rlang", "pROC", "Rtsne","viridis")
+
+packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot", "e1071", "caret", "randomForest", "rlang", "pROC", "Rtsne", "xgboost", "gbm","virdis")
 
 # Installation des packages s'ils ne sont pas déjà installés
 for (package in packages_to_install) {
@@ -32,7 +33,8 @@ library(rlang)
 library(Rtsne)
 library(gridExtra)
 library(viridis)
-
+library(xgboost)
+library(gbm)
 
 
 
@@ -138,6 +140,24 @@ ui <- shinyUI(
      ),NoDataMessage
   ),
   
+  # Catégorie Principale: Gestion de déséquilibre
+  tabPanel("Gestion de déséquilibre",
+     sidebarLayout(
+       sidebarPanel(
+         uiOutput("imbalanceTargetSelectorUI"),  # Dropdown for selecting the target variable
+         actionButton("showClassDistribution", "Afficher la Distribution des Classes"),
+         br(),
+         actionButton("applySMOTE", "Appliquer SMOTE pour rééquilibrer")
+       ),
+       mainPanel(
+         plotOutput("classDistributionPlot"),  # Plot to show class distribution
+         DTOutput("dataPreview")  # Data preview after applying SMOTE
+       )
+     )
+  ),
+  
+  
+  
   # Catégorie Principale: Entraînement et évaluation des modèles ML
   tabPanel("Entraînement et évaluation des modèles ML",id ="tab3",
    conditionalPanel(
@@ -148,7 +168,11 @@ ui <- shinyUI(
          #checkboxGroupInput("selectedFeatures", "Choisir les Features", choices = NULL),
          uiOutput("targetSelectorUI"),
          selectInput("modelType", "Choisir un modèle",
-                     choices = c("SVM", "Forêts Aléatoires")),
+                     choices = c("Logistic Regression", "Forêts Aléatoires", "k-Nearest Neighbors", "Decision Trees", "Gradient Boosting Machines", "XGBoost")),
+         conditionalPanel(
+           condition = "input.modelType == 'k-Nearest Neighbors'",
+           numericInput("numNeighbors", "Nombre de voisins (k):", value = 5, min = 1)
+         ),
          checkboxInput("crossValidation", "Appliquer la validation croisée", value = FALSE),
          numericInput("numFolds", "Nombre de plis pour la validation croisée", value = 10, min = 2),
          
@@ -697,85 +721,145 @@ server <- function(input, output, session) {
 
   # Entraînement et évaluation des modèles
   observeEvent(input$trainModel, {
-                 df <- if (!is.null(processedData())) processedData() else rawData()
-                 req(df, input$mlSelectedFeatures, input$selectedTarget)
+    df <- if (!is.null(processedData())) processedData() else rawData()
+    print("Hello")
+    req(df, input$mlSelectedFeatures, input$selectedTarget)
+    
+    # Séparation des features et de la target
+    targetName <- input$selectedTarget
+    target <- as.factor(df[[targetName]]) 
+    levels(target) <- make.names(levels(target))
+    features <- df[, input$mlSelectedFeatures, drop = FALSE]
+    
+    # Division des données en ensembles d'entraînement et de test
+    set.seed(123) # Pour la reproductibilité
+    partitions <- createDataPartition(target, p = .8, list = TRUE)
+    trainIndex <- partitions[[1]]  # Extrait correctement les indices
+    trainData <- features[trainIndex, ]
+    trainTarget <- target[trainIndex]
+    testData <- features[-trainIndex, ]
+    testTarget <- target[-trainIndex]
+    
+    # Configuration du contrôle d'entraînement avec ou sans validation croisée
+    control <- trainControl(method = if (input$crossValidation) "cv" else "none",
+                            number = if (input$crossValidation) input$numFolds else 1,
+                            summaryFunction = twoClassSummary,
+                            classProbs = TRUE,
+                            savePredictions = TRUE)
+    
+    # Entraînement du modèle
+    model <- NULL
+    if (input$modelType == "Logistic Regression") {
+      model <- train(x = trainData, y = trainTarget, method = "glm", 
+                     family = "binomial",
+                     trControl = control)
+      
+    } else if (input$modelType == "Forêts Aléatoires") {
+      model <- train(x = trainData, y = trainTarget, method = "rf", 
+                     trControl = control, 
+                     metric = "Accuracy",
+                     importance = TRUE)
+    } else if (input$modelType == "k-Nearest Neighbors") {
+      tuneGrid <- expand.grid(k = input$numNeighbors)
+      model <- train(x = trainData, y = trainTarget, method = "knn", 
+                     trControl = control,
+                     tuneGrid = tuneGrid)
+    } else if (input$modelType == "Decision Trees") {
+      model <- train(x = trainData, y = trainTarget, method = "rpart", 
+                     trControl = control)
+    } else if (input$modelType == "Gradient Boosting Machines") {
+      model <- train(x = trainData, y = trainTarget, method = "gbm", 
+                     trControl = control,
+                     verbose = FALSE)
+    }else if (input$modelType == "XGBoost") {
+      tuneGridXGB <- expand.grid(
+        nrounds = 100, 
+        max_depth = 3, 
+        eta = 0.3, 
+        gamma = 0,
+        colsample_bytree = 1,
+        min_child_weight = 1,
+        subsample = 1
+      )
+      
+      model <- train(x = trainData, y = trainTarget, method = "xgbTree", 
+                     trControl = control,
+                     tuneGrid = tuneGridXGB,
+                     verbose = FALSE) 
+    }
+    
+    # Prédiction et évaluation
+    if (!is.null(model)) {
+      predictions <- predict(model, newdata = testData)
+      confusionMatrix <- confusionMatrix(predictions, testTarget)
+      
+      output$modelMetrics <- renderPrint({
+        # Affichage des métriques de performance
+        metrics <- confusionMatrix$overall
+        cat("Accuracy:", metrics["Accuracy"], "\n")
+        
+        # Calcul et affichage de précision, rappel et F-score
+        precision <- posPredValue(predictions, testTarget)
+        sensitivity <- sensitivity(predictions, testTarget)
+        specificity <- specificity(predictions, testTarget)
+        fscore <- (2 * precision * sensitivity) / (precision + sensitivity)
+        
+        cat("Precision:", precision, "\n",
+            "Recall (Sensitivity):", sensitivity, "\n",
+            "Specificity:", specificity, "\n",
+            "F-score:", fscore, "\n")
+      })
+      
+      # Courbe ROC et AUC
+      output$rocPlot <- renderPlot({
+        probPred <- predict(model, newdata = testData, type = "prob")
+        rocCurve <- roc(response = testTarget, predictor = probPred[,2])
+        if (input$modelType != "Decision Trees"){
+          # Ajouter une interpolation
+          plot(smooth(rocCurve), main = "ROC Curve")
+          # Afficher l'AUC dans le titre ou comme une légende
+          aucValue <- auc(rocCurve)
+          legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
+        }
+      })
+      
+      # Feature Importance Plot
+      output$featureImportancePlot <- renderPlot({
+        if (input$modelType == "Forêts Aléatoires") {
+          varImpPlot <- varImp(model, scale = FALSE)
+          plot(varImpPlot)
+        } else if (input$modelType == "Logistic Regression" && !is.null(model)) {
+          # Extract coefficients and convert them to absolute values
+          coef_data <- as.data.frame(abs(coef(model$finalModel)[-1])) # Excluding intercept
+          names(coef_data) <- c("Importance")
+          coef_data$Feature <- rownames(coef_data)
+          ggplot(coef_data, aes(x = reorder(Feature, Importance), y = Importance)) +
+            geom_bar(stat = "identity") +
+            coord_flip() +
+            xlab("Feature") +
+            ylab("Absolute Coefficient") +
+            ggtitle("Feature Importance for Logistic Regression (Absolute Coefficients)")
+        } else if (input$modelType == "k-Nearest Neighbors") {
+          plot.new()
+          text(0.5, 0.5, "Feature importance is not applicable for k-Nearest Neighbors",
+               cex = 1.5)
+        }else if (input$modelType == "Gradient Boosting Machines" && !is.null(model)) {
+          varImpPlot <- varImp(model, scale = FALSE)
+          plot(varImpPlot)
+        } else if (input$modelType == "XGBoost" && !is.null(model)) {
+          xgbImp <- xgb.importance(feature_names = model$xNames, model = model$finalModel)
+          xgb.plot.importance(importance_matrix = xgbImp)
+        } else {
+          plot.new()
+          text(0.5, 0.5, "Feature importance not available for the selected model",
+               cex = 1.5)
+        }
+      })
+      
+    }
+    
+    
 
-                 # Séparation des features et de la target
-                 targetName <- input$selectedTarget
-                 target <- as.factor(df[[targetName]]) 
-                 levels(target) <- make.names(levels(target))
-                 features <- df[, input$mlSelectedFeatures, drop = FALSE]
-
-                 # Division des données en ensembles d'entraînement et de test
-                 set.seed(123) # Pour la reproductibilité
-                 partitions <- createDataPartition(target, p = .8, list = TRUE)
-                 trainIndex <- partitions[[1]]  # Extrait correctement les indices
-                 trainData <- features[trainIndex, ]
-                 trainTarget <- target[trainIndex]
-                 testData <- features[-trainIndex, ]
-                 testTarget <- target[-trainIndex]
-
-                 # Configuration du contrôle d'entraînement avec ou sans validation croisée
-                 control <- trainControl(method = if (input$crossValidation) "cv" else "none",
-                                         number = if (input$crossValidation) input$numFolds else 1,
-                                         summaryFunction = twoClassSummary,
-                                         classProbs = TRUE,
-                                         savePredictions = TRUE)
-
-                 # Entraînement du modèle
-                 model <- NULL
-                 if (input$modelType == "SVM") {
-                   print("SVM not available yet")
-                 } else if (input$modelType == "Forêts Aléatoires") {
-                   model <- train(x = trainData, y = trainTarget, method = "rf", 
-                                  trControl = control, 
-                                  metric = "Accuracy",
-                                  importance = TRUE)
-                 }
-
-                 # Prédiction et évaluation
-                 if (!is.null(model)) {
-                   predictions <- predict(model, newdata = testData)
-                   confusionMatrix <- confusionMatrix(predictions, testTarget)
-
-                   output$modelMetrics <- renderPrint({
-                     # Affichage des métriques de performance
-                     metrics <- confusionMatrix$overall
-                     cat("Accuracy:", metrics["Accuracy"], "\n")
-
-                     # Calcul et affichage de précision, rappel et F-score
-                     precision <- posPredValue(predictions, testTarget)
-                     sensitivity <- sensitivity(predictions, testTarget)
-                     specificity <- specificity(predictions, testTarget)
-                     fscore <- (2 * precision * sensitivity) / (precision + sensitivity)
-
-                     cat("Precision:", precision, "\n",
-                         "Recall (Sensitivity):", sensitivity, "\n",
-                         "Specificity:", specificity, "\n",
-                         "F-score:", fscore, "\n")
-                   })
-
-                   # Courbe ROC et AUC
-                   output$rocPlot <- renderPlot({
-                     probPred <- predict(model, newdata = testData, type = "prob")
-                     rocCurve <- roc(response = testTarget, predictor = probPred[,2])
-                     # Ajouter une interpolation
-                     plot(smooth(rocCurve), main = "ROC Curve")
-                     # Afficher l'AUC dans le titre ou comme une légende
-                     aucValue <- auc(rocCurve)
-                     legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
-                   })
-
-                   # Importance des features
-                   if (input$modelType == "Forêts Aléatoires") {
-                     output$featureImportancePlot <- renderPlot({
-                       varImpPlot <- varImp(model, scale = FALSE)
-                       plot(varImpPlot)
-                     })
-                   } else {
-                     output$featureImportancePlot <- renderPlot({})
-                   }
-                 }
   })
 
 
@@ -859,8 +943,43 @@ server <- function(input, output, session) {
 
   })
 
+  # SMOTE :
+  
+  # UI for selecting the target variable for imbalance management
+  output$imbalanceTargetSelectorUI <- renderUI({
+    df <- if (!is.null(processedData())) processedData() else rawData()
+    req(df)
+    selectInput("imbalanceTarget", "Choisir la Target pour Gestion de Déséquilibre", 
+                choices = names(df))
+  })
+    
+  # Show class distribution for the selected target variable
+  observeEvent(input$showClassDistribution, {
+    df <- if (!is.null(processedData())) processedData() else rawData()
+    req(df)
+    targetVar <- input$imbalanceTarget
+    output$classDistributionPlot <- renderPlot({
+      class_counts <- table(df[[targetVar]])
+      barplot(class_counts, 
+              main = "Distribution des Classes", 
+              xlab = "Classes", 
+              ylab = "Fréquence",
+              col = "skyblue",  # You can choose different colors
+              names.arg = names(class_counts))
+    })
+  })
+    
+    
+  # Apply SMOTE and show the updated data using the 'grt' package
+  observeEvent(input$applySMOTE, {
 
+    print('Cant find the right library for SMOTE')
+    
+  })
+  
+    
+    
+  }
+  # Lancement de l'application
+  shinyApp(ui = ui, server = server)
 
-}
-# Lancement de l'application
-shinyApp(ui = ui, server = server)
