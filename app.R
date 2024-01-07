@@ -141,7 +141,7 @@ ui <- shinyUI(
   ),
   
   # Catégorie Principale: Gestion de déséquilibre
-  tabPanel("Gestion de déséquilibre",
+  tabPanel("Imbalance Management",
      sidebarLayout(
        sidebarPanel(
          uiOutput("imbalanceTargetSelectorUI"),  # Dropdown for selecting the target variable
@@ -159,7 +159,7 @@ ui <- shinyUI(
   
   
   # Catégorie Principale: Entraînement et évaluation des modèles ML
-  tabPanel("Entraînement et évaluation des modèles ML",id ="tab3",
+  tabPanel("Machine Learning",id ="tab3",
    conditionalPanel(
     condition = "output.dataLoaded",
      sidebarLayout(
@@ -191,7 +191,7 @@ ui <- shinyUI(
   ),
   
   # PCA 
-  tabPanel("Réduction de la dimensionalité",
+  tabPanel("Dimensionality Reduction",
      sidebarLayout(
        sidebarPanel(
          h4("Réduction de la Dimension"),
