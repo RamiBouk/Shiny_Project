@@ -4,7 +4,7 @@
 
 # Installation des packages nécessaires
 
-packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot", "e1071", "caret", "randomForest", "rlang", "pROC", "Rtsne", "xgboost", "gbm","virdis")
+packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot", "e1071", "caret", "randomForest", "rlang", "pROC", "Rtsne", "xgboost", "gbm","virdis","ROSE","caret")
 
 # Installation des packages s'ils ne sont pas déjà installés
 for (package in packages_to_install) {
@@ -35,6 +35,8 @@ library(gridExtra)
 library(viridis)
 library(xgboost)
 library(gbm)
+library(ROSE)
+library(caret)
 
 
 
@@ -66,7 +68,9 @@ ui <- shinyUI(
            sidebarLayout(
              sidebarPanel(
                h3("Chargement des Données"),
-               fileInput("file1", "Choisir un fichier CSV"),
+               fileInput("dataFile", "Choose .data file"),
+               fileInput("namesFile", "Choose .names file"),
+
                actionButton("load", "Charger les Données")
              ),
              mainPanel(
@@ -94,6 +98,11 @@ ui <- shinyUI(
      sidebarLayout(
        sidebarPanel(
            tabsetPanel(
+             tabPanel("Types",
+                      h4("Convert to categorical"),
+                       uiOutput("typeOptionsUI")
+
+             ),
              tabPanel("Missing Values",
                       h4("Valeurs Manquantes"),
                       radioButtons("missingValues", 
@@ -118,6 +127,17 @@ ui <- shinyUI(
                       h4("Remove Outliers"), 
                       uiOutput("outlierOptionsUI"),
                       numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1)),
+             tabPanel("Doubles", 
+                      h4("Handle doubles"), 
+                      h5("Method"), 
+                      radioButtons("duplicatsMethod", 
+                                   "Method", 
+                                   choices = c("Automatic" 
+                                               #"Manual"
+                                               )),
+                      h5("Columns"), 
+                      uiOutput("doubleOptionsUI"),
+           ),
            ),
            actionButton("preprocess", "Appliquer")
        ),
@@ -145,9 +165,9 @@ ui <- shinyUI(
      sidebarLayout(
        sidebarPanel(
          uiOutput("imbalanceTargetSelectorUI"),  # Dropdown for selecting the target variable
-         actionButton("showClassDistribution", "Afficher la Distribution des Classes"),
          br(),
-         actionButton("applySMOTE", "Appliquer SMOTE pour rééquilibrer")
+         actionButton("applySMOTE", "Apply Over Sampling(SMOTE)"),
+         actionButton("applyUnder", "Apply Under Sampling")
        ),
        mainPanel(
          plotOutput("classDistributionPlot"),  # Plot to show class distribution
@@ -226,7 +246,7 @@ server <- function(input, output, session) {
 
   # Activation/désactivation du bouton de chargement
   observe({
-    if (is.null(input$file1)) {
+    if (is.null(input$dataFile)) {
       shinyjs::disable("load")
     } else {
       shinyjs::enable("load")
@@ -241,12 +261,21 @@ server <- function(input, output, session) {
 
   # Chargement des données
   observeEvent(input$load, {
-                 inFile <- input$file1
-                 if (is.null(inFile)) return()
-                 df <- read.csv(inFile$datapath, stringsAsFactors = FALSE)
+                 # Read .data file
+                 df <- read.csv(input$dataFile$datapath, header = FALSE,na.strings = c("", "NA", "?"))
+
+                 # Read .names file
+                 names_file <- input$namesFile$datapath
+                 if(!is.null(names_file)){
+                 attribute_info <- read_attributes_names(names_file)
+
+                 # Set column names
+                 colnames(df) <- attribute_info
+                 }
+
                  char_columns <- names(df)[sapply(df, function(x) is.character(x))]
                  for(char_column in char_columns)
-                        df[, char_column] <- ifelse(df[, char_column] == "", NA, df[, char_column])
+                   df[, char_column] <- ifelse(df[, char_column] == "", NA, df[, char_column])
                  rawData(df)
                  processedData(df)
                  # Assuming 'df' is your data frame
@@ -315,7 +344,18 @@ server <- function(input, output, session) {
     varTypes <- sapply(df, class)
     uiList <- lapply(names(df), function(var) {
                        if (any(is.na(df[[var]]))) {
-                        checkboxInput(paste0("missing_", var),  var, value = FALSE)
+                        checkboxInput(paste0("missing_", var),  paste(var,"(",sum(is.na(df[[var]])),")"), value = FALSE)
+                       }
+  })
+    do.call(tagList, uiList)
+  })
+  output$typeOptionsUI <- renderUI({
+    if (!is.null(processedData())) df<-processedData() else df<-rawData() 
+    varTypes <- sapply(df, class)
+    category_columns <- names(df)[sapply(df, function(x) is.numeric(x) && length(unique(x))<20)]
+    uiList <- lapply(names(df), function(var) {
+                       if (var %in% category_columns) {
+                        checkboxInput(paste0("cat_",var) ,  paste(var,"(",length(unique(df[[var]])),"unique values)"), value = FALSE)
                        }
   })
     do.call(tagList, uiList)
@@ -329,7 +369,9 @@ server <- function(input, output, session) {
     uiList <- lapply(names(df), function(var) {
                        if (varTypes[var] %in% c("integer", "numeric") && 
                            !all(unique(df[[var]]) %in% c(0, 1))) {
-                        checkboxInput(paste0("normalize_", var), paste("Normaliser", var), value = FALSE)
+                        checkboxInput(paste0("normalize_", var), paste( var,
+                                                                       "(mean=",round(mean(df[, var], na.rm = TRUE),digits=2),
+                                                                       ",sd=",round(sd(df[, var], na.rm = TRUE),digits=2),")"), value = FALSE)
                        }
   })
     do.call(tagList, uiList)
@@ -341,7 +383,7 @@ server <- function(input, output, session) {
     varTypes <- sapply(df, class)
     uiList <- lapply(names(df), function(var) {
                        if (length(unique(df[[var]])) < 24 && !all(unique(df[[var]]) %in% c(0, 1)) ) { ### JUMP
-                         checkboxInput(paste0("dummy_", var),  var, value = FALSE)
+                         checkboxInput(paste0("dummy_", var),paste(var,"(",length(unique(df[[var]])),"unique values)"), value = FALSE)
   }})
     do.call(tagList, uiList)
   })
@@ -352,6 +394,16 @@ server <- function(input, output, session) {
     uiList <- lapply(names(df), function(var) {
                        if (varTypes[var] %in% c("integer", "numeric")&& !all(unique(df[[var]]) %in% c(0, 1)) ) { ### JUMP
                          checkboxInput(paste0("remove_", var), var, value = FALSE)
+  }})
+    do.call(tagList, uiList)
+  })
+  output$doubleOptionsUI <- renderUI({
+    df <- processedData()
+    if (is.null(df)) return(NULL)
+    varTypes <- sapply(df, class)
+    uiList <- lapply(names(df), function(var) {
+                       if (any(duplicated(df[[var]]))) { ### JUMP
+                         checkboxInput(paste0("doubleSelect_", var),paste(var,"(",sum(duplicated(df[[var]])),")"), value = FALSE)
   }})
     do.call(tagList, uiList)
   })
@@ -379,6 +431,15 @@ server <- function(input, output, session) {
                        lower <- quantile(df[[var]], 0.25, na.rm = TRUE) - input$outlierThreshold * iqr_val
                        df <- df[df[[var]] <= upper & df[[var]] >= lower,]
                    }
+                 }
+                 if (input$duplicatsMethod == "Automatic") {
+                  for(var in names(df)) {
+                   if(!is.null(input[[paste0("doubleSelect_", var)]]) &&
+                      input[[paste0("doubleSelect_", var)]]) {
+                     df <- df %>% distinct(!!sym(var), .keep_all = TRUE)
+
+                   }
+                 }
                  }
 
                  # Gestion des valeurs manquantes
@@ -448,8 +509,14 @@ server <- function(input, output, session) {
                 if(!is.null(input[[paste0("dummy_", var)]]) && 
                    input[[paste0("dummy_", var)]]) {
                      # Check for missing values and replace them with a placeholder
-                     missing_values <- is.na(df[[var]])
-                     df[[var]][missing_values] <- "missing"
+                     if(is.factor(df[[var]])){
+                       df[[var]]=as.character(df[[var]])
+
+                     }
+
+                      missing_values <- is.na(df[[var]])
+                      df[[var]][missing_values] <- "missing"
+                   
 
                      # Create dummy variables
                      dummies <- as.data.frame(model.matrix(~as.factor(df[[var]]) - 1))
@@ -463,8 +530,18 @@ server <- function(input, output, session) {
 
                      df <- cbind(df, dummies)
                      df[[var]] <- NULL  # Remove the original column
-                   }
+                     }
+                     
+                   
                  }
+
+                for(var in names(df)) {
+                if(!is.null(input[[paste0("cat_", var)]]) && 
+                   input[[paste0("cat_", var)]]) {
+                    df[[var]]=as.factor(df[[var]])
+                   }
+                }
+                 
                  numeric_columns <- names(df)[sapply(df, function(x) is.numeric(x) | is.integer(x))]
                  category_columns <- names(df)[sapply(df, function(x) !is.numeric(x) && length(unique(x))<20)]
                  column=c(numeric_columns,category_columns)
@@ -574,13 +651,16 @@ server <- function(input, output, session) {
 
   output$unidimPlot <- renderUI({
     df <- if ( !is.null(processedData())) processedData() else rawData()
-    req(df)
-    print(input$selectVar)
-    print(length(unique(df[[input$selectVar]])))
     varTypes=sapply(df,class)
-    if (varTypes[input$selectVar] %in% c('integer','numeric' ) && !all(unique(df[[input$selectVar]]) %in% c(0, 1))){
+    print(input$selectVar)
+    print(sum(unique(df[[input$selectVar]])))
+    if (varTypes[input$selectVar] %in% c('integer','numeric' ) 
+        && !is.na(sum(unique(df[[input$selectVar]])))
+        && sum(unique(df[[input$selectVar]]))>5
+        ) {
+
       scatter_plt<-ggplot(df, aes_string(x = input$selectVar)) + 
-      geom_histogram(binwidth = (max(df[[input$selectVar]]) - min(df[[input$selectVar]])) / 20) + 
+      geom_histogram(binwidth = (max(df[[input$selectVar]],na.rm=TRUE) - min(df[[input$selectVar]],na.rm=TRUE)) / 20) + 
       theme_minimal() + 
       ggtitle(paste("Histogramme :", input$selectVar)) + 
       theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
@@ -600,13 +680,6 @@ server <- function(input, output, session) {
         selected_factor <- factor(df[[input$selectVar]])
       })
       
-       pie_plt= ggplot(your_data_factor, aes(x = "", y = selected_factor, fill = selected_factor)) +
-       geom_col(color = "black") +
-       geom_bar(stat = "identity", width = 1) +
-       scale_color_distiller(palette = "Spectral")+
-        coord_polar(theta = "y") +
-        labs(title = paste("Pie Chart of", input$selectVar), fill = input$selectVar) +
-        theme_void()
        bar_plt=  
           ggplot(df, aes(x = factor(df[[input$selectVar]]), fill = factor(df[[input$selectVar]]))) +
          geom_bar() +
@@ -617,8 +690,7 @@ server <- function(input, output, session) {
           ) 
 
         fluidRow(
-             column(6,renderPlot({pie_plt})),
-             column(6,renderPlot({bar_plt}))
+             column(12,renderPlot({bar_plt}))
              )
   }
   })
@@ -716,6 +788,7 @@ server <- function(input, output, session) {
   output$targetSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
+
     selectInput("selectedTarget", "Choisir la Target", choices = names(df))
   })
 
@@ -949,17 +1022,17 @@ server <- function(input, output, session) {
   output$imbalanceTargetSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
-    selectInput("imbalanceTarget", "Choisir la Target pour Gestion de Déséquilibre", 
-                choices = names(df))
+
+    category_columns <- names(df)[sapply(df, function(x) is.factor(x) || length(unique(x))<20  )]
+    selectInput("imbalanceTarget", "Select the class variable", 
+                choices = category_columns)
   })
     
   # Show class distribution for the selected target variable
-  observeEvent(input$showClassDistribution, {
-    df <- if (!is.null(processedData())) processedData() else rawData()
-    req(df)
-    targetVar <- input$imbalanceTarget
-    output$classDistributionPlot <- renderPlot({
-      class_counts <- table(df[[targetVar]])
+  output$classDistributionPlot <- renderPlot({
+      df <- if (!is.null(processedData())) processedData() else rawData()
+      targetVar <- input$imbalanceTarget
+      class_counts <- table(df[[input$imbalanceTarget]])
       barplot(class_counts, 
               main = "Distribution des Classes", 
               xlab = "Classes", 
@@ -967,19 +1040,77 @@ server <- function(input, output, session) {
               col = "skyblue",  # You can choose different colors
               names.arg = names(class_counts))
     })
-  })
     
     
   # Apply SMOTE and show the updated data using the 'grt' package
   observeEvent(input$applySMOTE, {
+      df <- if (!is.null(processedData())) processedData() else rawData()
+      # Create a formula dynamically
+      print(2)
+      formula <- as.formula(paste(input$imbalanceTarget, "~ ."))
+      df <- ROSE(formula, data = df, seed =123)$data
+      processedData(df)
+  })
+  observeEvent(input$applyUnder, {
+        df <- if (!is.null(processedData())) processedData() else rawData()
+        print(input)
+        print("<<<<<<<<<<<<<<<")
+        class_variable_name <- input$imbalanceTarget
+        class_variable_name <- input$imbalanceTarget
+        df[[class_variable_name]]=as.factor(df[[class_variable_name]])
 
-    print('Cant find the right library for SMOTE')
-    
+# Perform undersampling using caret package
+        df <- downSample(x = df[, names(df) != class_variable_name], 
+                                y = df[[class_variable_name]],
+                                yname = class_variable_name)
+ 
+       processedData(df)
   })
   
+
     
     
   }
+read_attributes_names <- function(file_path) {
+  lines <- readLines(file_path)
+  
+  # Find the line containing "7. Attribute information:"
+  attribute_info_line <- grep("^7\\.", lines)
+  
+  if (length(attribute_info_line) == 0) {
+    stop("Attribute information not found in the file.")
+  }
+  
+  # Extract the lines containing attribute information
+  attribute_lines <- lines[(attribute_info_line + 1):(length(lines))]
+  
+  # Filter out lines that don't start with a number
+  attribute_lines <- attribute_lines[grepl("^\\s*\\d", attribute_lines)]
+  
+  # Stop when reaching an empty line or a line starting with a digit
+  stop_line <- min(which(attribute_lines == " " | grepl("^\\d", attribute_lines))) - 1
+  
+  if (length(stop_line) == 0) {
+    stop_line <- length(attribute_lines)
+  }
+  
+  # Extract the attribute information
+  attribute_information <- attribute_lines[1:stop_line]
+  
+  # Extract attribute names without numbers and spaces
+  attribute_names <- gsub("^\\s*\\d+[:\\.]\\s*([^:]+).*", "\\1", attribute_information)
+
+  # Remove elements that don't start with a letter
+  clean_attribute_names <- attribute_names[sapply(strsplit(attribute_names, "\\s+"), function(x) any(grepl("^[[:alpha:]]", x)))]
+  clean_attribute_names <- gsub("\\s+", "_", clean_attribute_names)
+
+  
+  return(clean_attribute_names)
+}
+
+
   # Lancement de l'application
   shinyApp(ui = ui, server = server)
+
+
 

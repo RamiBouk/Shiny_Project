@@ -1,0 +1,66 @@
+library(shiny)
+library(DT)
+
+ui <- fluidPage(
+  fileInput("dataFile", "Choose .data file"),
+  fileInput("namesFile", "Choose .names file"),
+  DTOutput("dataTable")
+)
+
+server <- function(input, output) {
+  output$dataTable <- renderDT({
+    req(input$dataFile)
+    req(input$namesFile)
+
+    # Read .data file
+    data <- read.csv(input$dataFile$datapath, header = FALSE,na.strings = c("", "NA", "?"))
+
+    # Read .names file
+    names_file <- input$namesFile$datapath
+    attribute_info <- read_attributes_names(names_file)
+
+    # Set column names
+    colnames(data) <- attribute_info
+
+    # Display data table
+    datatable(data, options = list(scrollX = TRUE, searchable=FALSE))
+  })
+}
+read_attributes_names <- function(file_path) {
+  lines <- readLines(file_path)
+  
+  # Find the line containing "7. Attribute information:"
+  attribute_info_line <- grep("^7\\.", lines)
+  
+  if (length(attribute_info_line) == 0) {
+    stop("Attribute information not found in the file.")
+  }
+  
+  # Extract the lines containing attribute information
+  attribute_lines <- lines[(attribute_info_line + 1):(length(lines))]
+  
+  # Filter out lines that don't start with a number
+  attribute_lines <- attribute_lines[grepl("^\\s*\\d", attribute_lines)]
+  
+  # Stop when reaching an empty line or a line starting with a digit
+  stop_line <- min(which(attribute_lines == " " | grepl("^\\d", attribute_lines))) - 1
+  
+  if (length(stop_line) == 0) {
+    stop_line <- length(attribute_lines)
+  }
+  
+  # Extract the attribute information
+  attribute_information <- attribute_lines[1:stop_line]
+  
+  # Extract attribute names without numbers and spaces
+  attribute_names <- gsub("^\\s*\\d+[:\\.]\\s*([^:]+).*", "\\1", attribute_information)
+
+  # Remove elements that don't start with a letter
+  clean_attribute_names <- attribute_names[sapply(strsplit(attribute_names, "\\s+"), function(x) any(grepl("^[[:alpha:]]", x)))]
+
+  
+  return(clean_attribute_names)
+}
+
+shinyApp(ui, server)
+
