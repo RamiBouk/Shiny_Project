@@ -228,9 +228,10 @@ server <- function(input, output, session) {
                  # Assuming 'df' is your data frame
                  numeric_columns <- names(df)[sapply(df, function(x) is.numeric(x) | is.integer(x))]
                  category_columns <- names(df)[sapply(df, function(x) !is.numeric(x) && length(unique(x))<30)]
-                 updateSelectInput(session, "selectVar", choices = c(numeric_columns,category_columns))
-                 updateSelectInput(session, "selectVar1", choices = numeric_columns)
-                 updateSelectInput(session, "selectVar2", choices = c(numeric_columns,category_columns))
+                 column=c(numeric_columns,category_columns)
+                 updateSelectInput(session, "selectVar", choices =column) 
+                 updateSelectInput(session, "selectVar1", choices = column)
+                 updateSelectInput(session, "selectVar2", choices = column)
   })
 
   # Résumé des données
@@ -442,18 +443,19 @@ server <- function(input, output, session) {
                  }
                  numeric_columns <- names(df)[sapply(df, function(x) is.numeric(x) | is.integer(x))]
                  category_columns <- names(df)[sapply(df, function(x) !is.numeric(x) && length(unique(x))<20)]
+                 column=c(numeric_columns,category_columns)
                  if(selected_var %in% names(df))  
-                 updateSelectInput(session, "selectVar", choices = c(numeric_columns,category_columns),selected=selected_var)
+                 updateSelectInput(session, "selectVar", choices = column,selected=selected_var)
                 else
-                 updateSelectInput(session, "selectVar", choices = c(numeric_columns,category_columns))
+                 updateSelectInput(session, "selectVar", choices = column)
                  if(selected_var1 %in% names(df))  
-                 updateSelectInput(session, "selectVar1", choices = numeric_columns,selected=selected_var1)
+                 updateSelectInput(session, "selectVar1", choices = column,selected=selected_var1)
                else
-                 updateSelectInput(session, "selectVar1", choices = numeric_columns)
+                 updateSelectInput(session, "selectVar1", choices = column)
                  if(selected_var2 %in% names(df))  
-                 updateSelectInput(session, "selectVar2", choices =c(numeric_columns,category_columns),selected=selected_var2)
+                 updateSelectInput(session, "selectVar2", choices =column,selected=selected_var2)
                else
-                 updateSelectInput(session, "selectVar2", choices = c(numeric_columns,category_columns))
+                 updateSelectInput(session, "selectVar2", choices = column)
 
                  processedData(df)
   })
@@ -490,7 +492,7 @@ server <- function(input, output, session) {
       Mean = mean,
       SD = sd,
       Variance = variance,
-      Unique_items = as.integer(levels))
+      Unique_Values = as.integer(levels))
 
   }))
       x= list(Rows = number_of_rows, Columns = number_of_columns, Types = y)
@@ -576,17 +578,23 @@ server <- function(input, output, session) {
       
        pie_plt= ggplot(your_data_factor, aes(x = "", y = selected_factor, fill = selected_factor)) +
        geom_col(color = "black") +
-
        geom_bar(stat = "identity", width = 1) +
        scale_color_distiller(palette = "Spectral")+
-       #scale_fill_viridis(discrete = TRUE, option = "cividis", direction = -1) +  # Use viridis palette
-
-
         coord_polar(theta = "y") +
         labs(title = paste("Pie Chart of", input$selectVar), fill = input$selectVar) +
         theme_void()
-fluidRow(
-             column(12,renderPlot({pie_plt}))
+       bar_plt=  
+          ggplot(df, aes(x = factor(df[[input$selectVar]]), fill = factor(df[[input$selectVar]]))) +
+         geom_bar() +
+          labs(title = "Categorical Columns Stacked Bar Plot",
+            x = input$selectVar,
+            y = "Count",
+            fill=input$selectVar
+          ) 
+
+        fluidRow(
+             column(6,renderPlot({pie_plt})),
+             column(6,renderPlot({bar_plt}))
              )
   }
   })
@@ -599,12 +607,33 @@ fluidRow(
     category_columns <- names(df)[sapply(df, function(x) length(unique(x))<20)]
     print(category_columns)
      if (input$selectVar1 %in% category_columns || input$selectVar2 %in% category_columns) {
-        selected_factor <- factor(df[[input$selectVar2]])
-        selected_num <- df[[input$selectVar1]]
+       if(input$selectVar1 %in% category_columns && input$selectVar2 %in% category_columns){
+            col1 <- factor(df[[input$selectVar1]])
+            col2 <- factor(df[[input$selectVar2]])
+          ggplot(df, aes(x = col1, fill = col2)) +
+          geom_bar() +
+          labs(title = "Categorical Columns Stacked Bar Plot",
+            x = input$selectVar1,
+            y = "Count",
+            fill = input$selectVar2
+          ) 
 
-      ggplot(df, aes(x =selected_factor, y =selected_num)) +
+       }
+       else{
+       if(input$selectVar1 %in% category_columns){
+        selected_factor <- input$selectVar1
+        selected_num <- input$selectVar2
+       }else{
+        selected_factor <- input$selectVar2
+        selected_num <- input$selectVar1
+       }
+      selected_factor_val <- factor(df[[selected_factor]])
+      selected_num_val <- df[[selected_num]]
+
+      ggplot(df, aes(x =selected_factor_val, y =selected_num_val)) +
       geom_boxplot(fill = "skyblue", color = "black") +
-      labs(title = "Boxplot of Numerical Values by Category", x = "Category", y = "Numerical Value")
+      labs(title = paste("Boxplot of ", selected_num, "by Category ",selected_factor), x =selected_factor, y = selected_num)
+       }
     } else if (input$selectVar1 %in% numeric_columns && input$selectVar2 %in% numeric_columns) {
       cor_value <- cor(df[[input$selectVar1]], df[[input$selectVar2]], use = "complete.obs")
       ggplot(df, aes_string(x = input$selectVar1, y = input$selectVar2)) + 
