@@ -4,7 +4,11 @@
 
 # Installation des packages nécessaires
 
-packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", "dplyr", "randomForest", "caret", "DT", "shinythemes", "ggcorrplot", "e1071", "caret", "randomForest", "rlang", "pROC", "Rtsne", "xgboost", "gbm","virdis","ROSE","caret")
+packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", 
+                         "dplyr", "randomForest", "caret", "DT", 
+                         "shinythemes", "ggcorrplot", "e1071", "caret", 
+                         "randomForest", "rlang", "pROC", "Rtsne", 
+                         "xgboost", "gbm","virdis","ROSE","caret","bslib")
 
 # Installation des packages s'ils ne sont pas déjà installés
 for (package in packages_to_install) {
@@ -37,6 +41,7 @@ library(xgboost)
 library(gbm)
 library(ROSE)
 library(caret)
+library(bslib)
 
 
 
@@ -99,44 +104,62 @@ ui <- shinyUI(
        sidebarPanel(
            tabsetPanel(
              tabPanel("Types",
-                      h4("Convert to categorical"),
+               checkboxGroupInput("_", "Convert To Categorical", choices = NULL),
+                  card(
+                  height = 400,
+                    card_body(
                        uiOutput("typeOptionsUI")
+                       ))
 
              ),
              tabPanel("Missing Values",
-                      h4("Valeurs Manquantes"),
                       radioButtons("missingValues", 
-                                   "Gestion des Valeurs Manquantes", 
+                                   "Method", 
                                    choices = c("Suppression", 
                                                "Replace with Mode", 
                                                "Replace with Mean",
                                                "Replace with Median"
                                                ), 
                                    selected = "Suppression"),
+                checkboxGroupInput("_", "Select The Features", choices = NULL),
+                  card(
+                  height = 380,
+                    card_body(
                        uiOutput("missingOptionsUI")
+                       ))
 
              ),
              tabPanel("Normalization",
-                      h4("Select Columns"),
+                checkboxGroupInput("_", "Select The Columns", choices = NULL),
+                  card(
+                  height = 500,
+                    card_body(
                       uiOutput("varOptionsUI")
+                      ))
              ),
              tabPanel("Dummification",
-                      h4("Turn to one hot encoding:"), 
+                checkboxGroupInput("_", "Turn to one hot encoding", choices = NULL),
+                  card(
+                  height = 500,
+                    card_body(
                       uiOutput("catOptionsUI")), 
+                       )),
              tabPanel("Outliers", 
-                      h4("Remove Outliers"), 
+                checkboxGroupInput("_", "Remove Outliers", choices = NULL),
+                  card(
+                  height = 400,
+                    card_body(
                       uiOutput("outlierOptionsUI"),
-                      numericInput("outlierThreshold", "Seuil pour Outliers (IQR)", 1.5, min = 1, max = 5, step = 0.1)),
-             tabPanel("Doubles", 
-                      h4("Handle doubles"), 
-                      h5("Method"), 
-                      radioButtons("duplicatsMethod", 
-                                   "Method", 
-                                   choices = c("Automatic" 
-                                               #"Manual"
-                                               )),
-                      h5("Columns"), 
+                      )),
+                      numericInput("outlierThreshold", "IQR", 1.5, min = 1, max = 5, step = 0.1)),
+             tabPanel("Duplicates", 
+                checkboxGroupInput("_", "Remove Duplicates", choices = NULL),
+                  card(
+                  height = 400,
+                    card_body(
                       uiOutput("doubleOptionsUI"),
+                      )),
+                      
            ),
            ),
            actionButton("preprocess", "Appliquer")
@@ -150,10 +173,17 @@ ui <- shinyUI(
                     selectizeInput("selectVar", "Variable", choices = NULL),
                     uiOutput("unidimPlot"), 
                     ),
-           tabPanel("Bidimensionnelle Visualization", 
-         selectizeInput("selectVar1", "Variable X", choices = NULL),
-         selectizeInput("selectVar2", "Variable Y", choices = NULL),
-                    plotOutput("bidimPlot"))
+                     tabPanel("Bidimensionnelle Visualization", 
+
+                              fluidRow(
+                                       column(3, 
+                                              selectizeInput("selectVar1", "Variable X", choices = NULL),
+                                              ),
+                                       column(9, 
+                                              selectizeInput("selectVar2", "Variable Y", choices = NULL),
+                                       )
+                                       ),
+                              plotOutput("bidimPlot"))
          ),
          )
        )
@@ -162,6 +192,8 @@ ui <- shinyUI(
   
   # Catégorie Principale: Gestion de déséquilibre
   tabPanel("Imbalance Management",
+   conditionalPanel(
+    condition = "output.dataLoaded",
      sidebarLayout(
        sidebarPanel(
          uiOutput("imbalanceTargetSelectorUI"),  # Dropdown for selecting the target variable
@@ -174,6 +206,8 @@ ui <- shinyUI(
          DTOutput("dataPreview")  # Data preview after applying SMOTE
        )
      )
+    ),NoDataMessage
+
   ),
   
   
@@ -212,13 +246,22 @@ ui <- shinyUI(
   
   # PCA 
   tabPanel("Dimensionality Reduction",
+   conditionalPanel(
+    condition = "output.dataLoaded",
      sidebarLayout(
        sidebarPanel(
          h4("Réduction de la Dimension"),
          selectInput("dimReductionMethod", "Méthode:",
                      choices = c("PCA", "t-SNE")),
          numericInput("numComponents", "Nombre de composants:", value = 2, min = 1),
-         checkboxGroupInput("selectedFeatures", "Choisir les Features", choices = NULL),
+    checkboxGroupInput("", "Choisir les Features", choices = NULL),
+    card(
+      height = 350,
+    style = "resize:vertical;",
+    card_body(
+         checkboxGroupInput("selectedFeatures", "", choices = NULL)
+    )
+  ),
          #uiOutput("dimRedFeatureSelectorUI"),
          actionButton("runDimReduction", "Exécuter la Réduction de Diension")
        ),
@@ -228,6 +271,7 @@ ui <- shinyUI(
            tabPanel("Summary", verbatimTextOutput("dimRedSummary"))
          )
        )
+     ),NoDataMessage
      )
   )
   
@@ -422,7 +466,12 @@ server <- function(input, output, session) {
 
                  # Gestion des outliers
                  varTypes <- sapply(df, class)
+                 print("hey")
+                 print(names(df))
+                 print(input)
                  for(var in names(df)) {
+                  print(var)
+                  print("_______________________________Start")
                    if(!is.null(input[[paste0("remove_", var)]]) &&
                       varTypes[var] %in% c("integer", "numeric") && 
                       input[[paste0("remove_", var)]]) {
@@ -431,14 +480,15 @@ server <- function(input, output, session) {
                        lower <- quantile(df[[var]], 0.25, na.rm = TRUE) - input$outlierThreshold * iqr_val
                        df <- df[df[[var]] <= upper & df[[var]] >= lower,]
                    }
+                  print("_______________________________end")
                  }
-                 if (input$duplicatsMethod == "Automatic") {
+                  print("_______________________________end")
+                 
                   for(var in names(df)) {
                    if(!is.null(input[[paste0("doubleSelect_", var)]]) &&
                       input[[paste0("doubleSelect_", var)]]) {
                      df <- df %>% distinct(!!sym(var), .keep_all = TRUE)
 
-                   }
                  }
                  }
 
@@ -530,6 +580,9 @@ server <- function(input, output, session) {
 
                      df <- cbind(df, dummies)
                      df[[var]] <- NULL  # Remove the original column
+                     for(colname in colnames(dummies)){
+                           df[[colname]]=as.factor(df[[colname]])
+                      }
                      }
                      
                    
@@ -652,24 +705,26 @@ server <- function(input, output, session) {
   output$unidimPlot <- renderUI({
     df <- if ( !is.null(processedData())) processedData() else rawData()
     varTypes=sapply(df,class)
-    print(input$selectVar)
-    print(sum(unique(df[[input$selectVar]])))
     if (varTypes[input$selectVar] %in% c('integer','numeric' ) 
-        && !is.na(sum(unique(df[[input$selectVar]])))
-        && sum(unique(df[[input$selectVar]]))>5
+       # && !is.na(sum(unique(df[[input$selectVar]])))
+       &&n_distinct(df[[input$selectVar]], na.rm = FALSE) >5
         ) {
 
       scatter_plt<-ggplot(df, aes_string(x = input$selectVar)) + 
-      geom_histogram(binwidth = (max(df[[input$selectVar]],na.rm=TRUE) - min(df[[input$selectVar]],na.rm=TRUE)) / 20) + 
-      theme_minimal() + 
+      geom_histogram(binwidth = (max(df[[input$selectVar]],na.rm=TRUE) - min(df[[input$selectVar]],na.rm=TRUE)) / 20,
+                     alpha=0.9,
+                     color="black",
+                     fill = "skyblue"
+                     ) + 
       ggtitle(paste("Histogramme :", input$selectVar)) + 
       theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
 
+
       box_plt <-ggplot(df,aes_string(y=input$selectVar))+ 
-      geom_boxplot(fill = "skyblue", color = "black") +
-        theme_minimal() +
-        ggtitle(paste("Box Plot :", input$selectVar)) + 
-        theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+      geom_boxplot(fill = "skyblue", color = "black",alpha=0.8) +
+      stat_boxplot(geom = "errorbar",width = 0.15) +
+      ggtitle(paste("Box Plot :", input$selectVar)) + 
+      theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
 
     fluidRow(
                     column(6,renderPlot({scatter_plt})), 
@@ -693,6 +748,10 @@ server <- function(input, output, session) {
              column(12,renderPlot({bar_plt}))
              )
   }
+    else{
+      print(varTypes[input$selectVar])
+      print(varTypes[input$selectVar] %in% c('integer','numeric' )) 
+    }
   })
 
   # Génération des graphiques bidimensionnels avec indicateur de corrélation
@@ -710,7 +769,7 @@ server <- function(input, output, session) {
           geom_bar() +
           labs(title = "Categorical Columns Stacked Bar Plot",
             x = input$selectVar1,
-            y = "Count",
+            y =input$selectVar2,
             fill = input$selectVar2
           ) 
 
@@ -727,18 +786,27 @@ server <- function(input, output, session) {
       selected_num_val <- df[[selected_num]]
 
       ggplot(df, aes(x =selected_factor_val, y =selected_num_val)) +
-      geom_boxplot(fill = "skyblue", color = "black") +
+      geom_violin(fill="skyblue",alpha=0.2)+
+      geom_boxplot(fill = "skyblue", color = "black",alpha=0.9) +
+      stat_boxplot(geom = "errorbar",
+               width = 0.15) +
       labs(title = paste("Boxplot of ", selected_num, "by Category ",selected_factor), x =selected_factor, y = selected_num)
        }
     } else if (input$selectVar1 %in% numeric_columns && input$selectVar2 %in% numeric_columns) {
       cor_value <- cor(df[[input$selectVar1]], df[[input$selectVar2]], use = "complete.obs")
-      ggplot(df, aes_string(x = input$selectVar1, y = input$selectVar2)) + 
+      p <- ggplot(df, aes_string(x = input$selectVar1, y = input$selectVar2)) + 
         geom_point() + 
         theme_minimal() +
+        geom_smooth()+
         ggtitle(paste("Scatter Plot :", input$selectVar1, "&", input$selectVar2)) + 
-        theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5)) +
-        annotate("text", x = Inf, y = Inf, label = paste("Corrélation:", round(cor_value, 2)), 
-                 hjust = 1.1, vjust = 1.1, color = "red", size = 5, fontface = "bold")
+        theme(plot.title = element_text(face = "bold", size = 14, hjust = 0.5)) +
+        annotate("text", x = Inf, y = Inf, label = paste("Correlatoin:", round(cor_value, 2)), 
+                 hjust = 1.1, vjust = 1.1, size = 5, fontface = "bold")
+      margin_type <- "histogram"
+      p <- ggExtra::ggMarginal(p, type = margin_type, margins = "both",
+        size = 8)
+
+      p
     }
   })
 
@@ -782,7 +850,19 @@ server <- function(input, output, session) {
   output$mlFeatureSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
-    checkboxGroupInput("mlSelectedFeatures", "Choisir les Features", choices = names(df))
+    card(
+     card_body(
+    checkboxGroupInput("_", "Choisir les Features", choices = NULL),
+    card(
+      height = 350,
+    style = "resize:vertical;",
+    card_body(
+    checkboxGroupInput("mlSelectedFeatures", NULL, choices = names(df))
+    )
+    )
+    )
+  )
+
   })
 
   output$targetSelectorUI <- renderUI({
@@ -1005,7 +1085,7 @@ server <- function(input, output, session) {
                                              #CumulativeVariance = cumvar[1:input$numComponents]
                                              CumulativeVariance = cumvar
                      )
-                     pirint(dfSummary)
+                     print(dfSummary)
                    } else if (input$dimReductionMethod == "t-SNE" && !is.null(tsneResult)) {
                      cat("t-SNE does not provide a summary of variance explained as PCA does.\n")
                      cat("t-SNE is mainly used for visualization to see the clustering of high-dimensional data.")
