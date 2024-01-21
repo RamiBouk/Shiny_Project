@@ -45,6 +45,10 @@ library(bslib)
 
 
 
+
+
+
+
 # Définition de l'interface utilisateur
 NoDataMessage <- conditionalPanel(
                  condition = "! output.dataLoaded",
@@ -73,8 +77,8 @@ ui <- shinyUI(
            sidebarLayout(
              sidebarPanel(
                h3("Chargement des Données"),
-               fileInput("dataFile", "Choose .data file"),
-               fileInput("namesFile", "Choose .names file"),
+               fileInput("dataFile", "Choose .csv file"),
+              # fileInput("namesFile", "Choose .names file"),
 
                actionButton("load", "Charger les Données")
              ),
@@ -218,62 +222,61 @@ ui <- shinyUI(
     condition = "output.dataLoaded",
      sidebarLayout(
        sidebarPanel(
+         uiOutput("mltargetSelectorUI"),
+         uiOutput("modelSelectorUI"),
          uiOutput("mlFeatureSelectorUI"),
          #checkboxGroupInput("selectedFeatures", "Choisir les Features", choices = NULL),
-         uiOutput("targetSelectorUI"),
-         selectInput("modelType", "Choisir un modèle",
-                     choices = c("Logistic Regression", "Forêts Aléatoires", "k-Nearest Neighbors", "Decision Trees", "Gradient Boosting Machines", "XGBoost")),
          conditionalPanel(
            condition = "input.modelType == 'k-Nearest Neighbors'",
            numericInput("numNeighbors", "Nombre de voisins (k):", value = 5, min = 1)
          ),
-         checkboxInput("crossValidation", "Appliquer la validation croisée", value = FALSE),
+         checkboxInput("crossValidation", "Apply cross validation", value = FALSE),
          numericInput("numFolds", "Nombre de plis pour la validation croisée", value = 10, min = 2),
          
-         actionButton("trainModel", "Entraîner le Modèle")
+         actionButton("trainModel", "Train The model")
        ),
        mainPanel(
          tabsetPanel(
            tabPanel("Résultats d'Évaluation",
                     verbatimTextOutput("modelMetrics"),
                     plotOutput("rocPlot")),  # Ajout d'un plot pour la courbe ROC
-           tabPanel("Importance des Features",
+           tabPanel("Feature Importance",
                     plotOutput("featureImportancePlot"))
          )
        )
      )),NoDataMessage
   ),
   
-  # PCA 
-  tabPanel("Dimensionality Reduction",
-   conditionalPanel(
-    condition = "output.dataLoaded",
-     sidebarLayout(
-       sidebarPanel(
-         h4("Réduction de la Dimension"),
-         selectInput("dimReductionMethod", "Méthode:",
-                     choices = c("PCA", "t-SNE")),
-         numericInput("numComponents", "Nombre de composants:", value = 2, min = 1),
-    checkboxGroupInput("", "Choisir les Features", choices = NULL),
-    card(
-      height = 350,
-    style = "resize:vertical;",
-    card_body(
-         checkboxGroupInput("selectedFeatures", "", choices = NULL)
-    )
-  ),
-         #uiOutput("dimRedFeatureSelectorUI"),
-         actionButton("runDimReduction", "Exécuter la Réduction de Diension")
-       ),
-       mainPanel(
-         tabsetPanel(
-           tabPanel("Plot", plotOutput("dimRedPlot")),
-           tabPanel("Summary", verbatimTextOutput("dimRedSummary"))
-         )
-       )
-     ),NoDataMessage
-     )
-  )
+ # # PCA 
+ # tabPanel("Dimensionality Reduction",
+ #  conditionalPanel(
+ #   condition = "output.dataLoaded",
+ #    sidebarLayout(
+ #      sidebarPanel(
+ #        h4("Réduction de la Dimension"),
+ #        selectInput("dimReductionMethod", "Méthode:",
+ #                    choices = c("PCA", "t-SNE")),
+ #        numericInput("numComponents", "Nombre de composants:", value = 2, min = 1),
+ #   checkboxGroupInput("", "Choisir les Features", choices = NULL),
+ #   card(
+ #     height = 350,
+ #   style = "resize:vertical;",
+ #   card_body(
+ #        checkboxGroupInput("selectedFeatures", "", choices = NULL)
+ #   )
+ # ),
+ #        #uiOutput("dimRedFeatureSelectorUI"),
+ #        actionButton("runDimReduction", "Exécuter la Réduction de Diension")
+ #      ),
+ #      mainPanel(
+ #        tabsetPanel(
+ #          tabPanel("Plot", plotOutput("dimRedPlot")),
+ #          tabPanel("Summary", verbatimTextOutput("dimRedSummary"))
+ #        )
+ #      )
+ #    ),NoDataMessage
+ #    )
+ # )
   
   
 ))
@@ -284,7 +287,6 @@ server <- function(input, output, session) {
   # Initialisation des valeurs réactives
   rawData <- reactiveVal()
   processedData <- reactiveVal(NULL)
-
   # ReactiveValues to track changes
   editedData <- reactiveValues(data = NULL)
 
@@ -304,22 +306,34 @@ server <- function(input, output, session) {
   outputOptions(output, "dataLoaded", suspendWhenHidden = FALSE)
 
   # Chargement des données
+  # Read .data file
+  df <- read.csv("./hepatitis/hepatitis.data", header = FALSE,na.strings = c("", "NA", "?"))
+
+  # Read .names file
+  names_file <- "./hepatitis/hepatitis.names"
+  if(!is.null(names_file)){
+  attribute_info <- read_attributes_names(names_file)
+
+  # Set column names
+  colnames(df) <- attribute_info
+  }
+
+  char_columns <- names(df)[sapply(df, function(x) is.character(x))]
+  for(char_column in char_columns)
+    df[, char_column] <- ifelse(df[, char_column] == "", NA, df[, char_column])
+  rawData(df)
+  processedData(df)
+  # Assuming 'df' is your data frame
+  numeric_columns <- names(df)[sapply(df, function(x) is.numeric(x) | is.integer(x))]
+  category_columns <- names(df)[sapply(df, function(x) !is.numeric(x) && length(unique(x))<30)]
+  column=c(numeric_columns,category_columns)
+  updateSelectInput(session, "selectVar", choices =column) 
+  updateSelectInput(session, "selectVar1", choices = column)
+  updateSelectInput(session, "selectVar2", choices = column)
   observeEvent(input$load, {
                  # Read .data file
-                 df <- read.csv(input$dataFile$datapath, header = FALSE,na.strings = c("", "NA", "?"))
+                 df <- read.csv(input$dataFile$datapath,na.strings = c("", "NA", "?"))
 
-                 # Read .names file
-                 names_file <- input$namesFile$datapath
-                 if(!is.null(names_file)){
-                 attribute_info <- read_attributes_names(names_file)
-
-                 # Set column names
-                 colnames(df) <- attribute_info
-                 }
-
-                 char_columns <- names(df)[sapply(df, function(x) is.character(x))]
-                 for(char_column in char_columns)
-                   df[, char_column] <- ifelse(df[, char_column] == "", NA, df[, char_column])
                  rawData(df)
                  processedData(df)
                  # Assuming 'df' is your data frame
@@ -331,19 +345,6 @@ server <- function(input, output, session) {
                  updateSelectInput(session, "selectVar2", choices = column)
   })
 
-  # Résumé des données
-  output$dataSummary <- renderPrint({
-    if (!is.null(rawData())) {
-      print("Data Summary")
-      print(summary(processedData()))}
-    else if (!is.null(processedData())) {
-        print("Data Summary")
-        print(summary(processedData()))
-      }
-     else {
-      "Aucune donnée chargée."
-    }
-  })
 
   observeEvent(input$dataTable_cell_edit, {
                  info <- input$dataTable_cell_edit
@@ -466,12 +467,7 @@ server <- function(input, output, session) {
 
                  # Gestion des outliers
                  varTypes <- sapply(df, class)
-                 print("hey")
-                 print(names(df))
-                 print(input)
                  for(var in names(df)) {
-                  print(var)
-                  print("_______________________________Start")
                    if(!is.null(input[[paste0("remove_", var)]]) &&
                       varTypes[var] %in% c("integer", "numeric") && 
                       input[[paste0("remove_", var)]]) {
@@ -480,9 +476,7 @@ server <- function(input, output, session) {
                        lower <- quantile(df[[var]], 0.25, na.rm = TRUE) - input$outlierThreshold * iqr_val
                        df <- df[df[[var]] <= upper & df[[var]] >= lower,]
                    }
-                  print("_______________________________end")
                  }
-                  print("_______________________________end")
                  
                   for(var in names(df)) {
                    if(!is.null(input[[paste0("doubleSelect_", var)]]) &&
@@ -748,10 +742,6 @@ server <- function(input, output, session) {
              column(12,renderPlot({bar_plt}))
              )
   }
-    else{
-      print(varTypes[input$selectVar])
-      print(varTypes[input$selectVar] %in% c('integer','numeric' )) 
-    }
   })
 
   # Génération des graphiques bidimensionnels avec indicateur de corrélation
@@ -760,7 +750,6 @@ server <- function(input, output, session) {
     req(df)
     numeric_columns <- names(df)[sapply(df, function(x) is.numeric(x) | is.integer(x))]
     category_columns <- names(df)[sapply(df, function(x) length(unique(x))<20)]
-    print(category_columns)
      if (input$selectVar1 %in% category_columns || input$selectVar2 %in% category_columns) {
        if(input$selectVar1 %in% category_columns && input$selectVar2 %in% category_columns){
             col1 <- factor(df[[input$selectVar1]])
@@ -849,43 +838,88 @@ server <- function(input, output, session) {
   # Génération des sélecteurs de features et target
   output$mlFeatureSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
+    #depend on modelType
     req(df)
     card(
      card_body(
     checkboxGroupInput("_", "Choisir les Features", choices = NULL),
     card(
-      height = 350,
-    style = "resize:vertical;",
+      height = 300,
     card_body(
-    checkboxGroupInput("mlSelectedFeatures", NULL, choices = names(df))
+    checkboxGroupInput("mlSelectedFeatures", NULL, choices = names(df)[names(df)!=input$mlselectedTarget])
     )
     )
     )
   )
 
   })
-
-  output$targetSelectorUI <- renderUI({
+  output$modelSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
+    varTypes <- sapply(df, class)
+    selectInput("modelType", "Choose the model",
+                     choices = c("Logistic Regression", "Random Forest",
+                                 "k-Nearest Neighbors", "Decision Tree", 
+                                 "Gradient Boosting Machines", "XGBoost"))
 
-    selectInput("selectedTarget", "Choisir la Target", choices = names(df))
+  })
+  observeEvent(input$mlselectedTarget,{
+    df <- if (!is.null(processedData())) processedData() else rawData()
+    req(df)
+                models=c( "Random Forest", 
+                              "k-Nearest Neighbors", "Decision Tree", 
+                              "Gradient Boosting Machines", "XGBoost")
+                if(n_distinct(df[[input$mlselectedTarget]], na.rm = FALSE) <3){
+                  updateSelectInput(session,"modelType",choices=c(models,"Logistic Regression"))
+                }
+                else{
+                  updateSelectInput(session,"modelType",choices=models)
+                }
+                updateCheckboxGroupInput(session,"mlSelectedFeatures",NULL,names(df)[names(df)!=input$mlselectedTarget])
+
+  })
+#  observeEvent(input$modelType,{
+#                 print("changed target")
+#    df <- if (!is.null(processedData())) processedData() else rawData()
+#    req(df)
+#                models=c( "Random Forest", 
+#                              "k-Nearest Neighbors", "Decision Tree", 
+#                              "Gradient Boosting Machines", "XGBoost")
+#                if(n_distinct(df[[input$mlselectedTarget]], na.rm = FALSE) <3){
+#                  updateSelectInput(session,"modelType",choices=c(models,"Logistic Regression"))
+#                }
+#                else{
+#                  updateSelectInput(session,"modelType",choices=models)
+#                }
+#
+#  })
+
+  output$mltargetSelectorUI <- renderUI({
+    df <- if (!is.null(processedData())) processedData() else rawData()
+    req(df)
+    selectInput("mlselectedTarget", "Choose the Target", choices = names(df))
   })
 
   # Entraînement et évaluation des modèles
   observeEvent(input$trainModel, {
     df <- if (!is.null(processedData())) processedData() else rawData()
-    print("Hello")
-    req(df, input$mlSelectedFeatures, input$selectedTarget)
+    #if(input$mlSelectedFeatures){}
+    if(length(input$mlSelectedFeatures)<2){
+      output$rocPlot <- renderPlot({
+      text(0.5, 0.5, "Select atleast 2 features",cex = 1.5)
+      })
+    }
+    else{
+    #req(length(input$mlSelectedFeatures)>1)
+    df_comp<- na.omit(df[c(input$mlselectedTarget,input$mlSelectedFeatures)])
     
     # Séparation des features et de la target
-    targetName <- input$selectedTarget
-    target <- as.factor(df[[targetName]]) 
+    targetName <- input$mlselectedTarget
+    target <- as.factor(df_comp[[targetName]])
     levels(target) <- make.names(levels(target))
-    features <- df[, input$mlSelectedFeatures, drop = FALSE]
+    features <- df_comp[, input$mlSelectedFeatures]
     
     # Division des données en ensembles d'entraînement et de test
-    set.seed(123) # Pour la reproductibilité
     partitions <- createDataPartition(target, p = .8, list = TRUE)
     trainIndex <- partitions[[1]]  # Extrait correctement les indices
     trainData <- features[trainIndex, ]
@@ -907,7 +941,7 @@ server <- function(input, output, session) {
                      family = "binomial",
                      trControl = control)
       
-    } else if (input$modelType == "Forêts Aléatoires") {
+    } else if (input$modelType == "Random Forest") {
       model <- train(x = trainData, y = trainTarget, method = "rf", 
                      trControl = control, 
                      metric = "Accuracy",
@@ -917,7 +951,7 @@ server <- function(input, output, session) {
       model <- train(x = trainData, y = trainTarget, method = "knn", 
                      trControl = control,
                      tuneGrid = tuneGrid)
-    } else if (input$modelType == "Decision Trees") {
+    } else if (input$modelType == "Decision Tree") {
       model <- train(x = trainData, y = trainTarget, method = "rpart", 
                      trControl = control)
     } else if (input$modelType == "Gradient Boosting Machines") {
@@ -969,7 +1003,7 @@ server <- function(input, output, session) {
         rocCurve <- roc(response = testTarget, predictor = probPred[,2])
         if (input$modelType != "Decision Trees"){
           # Ajouter une interpolation
-          plot(smooth(rocCurve), main = "ROC Curve")
+          plot(rocCurve, main = "ROC Curve")
           # Afficher l'AUC dans le titre ou comme une légende
           aucValue <- auc(rocCurve)
           legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
@@ -1013,7 +1047,7 @@ server <- function(input, output, session) {
     
     
 
-  })
+  }})
 
 
   # Dimensionality Reduction :
@@ -1046,7 +1080,6 @@ server <- function(input, output, session) {
                    pcaResult <- prcomp(selectedData, scale. = TRUE)
                    result <- as.data.frame(pcaResult$x)
                  } else if (input$dimReductionMethod == "t-SNE") {
-                   set.seed(123)  # For reproducibility
                    tsneResult <- Rtsne(selectedData, dims = input$numComponents, check_duplicates = FALSE)$Y
                    result <- as.data.frame(tsneResult)
                  }
@@ -1112,7 +1145,11 @@ server <- function(input, output, session) {
   output$classDistributionPlot <- renderPlot({
       df <- if (!is.null(processedData())) processedData() else rawData()
       targetVar <- input$imbalanceTarget
+
+      print(input$imbalanceTarget)
+      req(input$imbalanceTarget)
       class_counts <- table(df[[input$imbalanceTarget]])
+
       barplot(class_counts, 
               main = "Distribution des Classes", 
               xlab = "Classes", 
@@ -1126,15 +1163,17 @@ server <- function(input, output, session) {
   observeEvent(input$applySMOTE, {
       df <- if (!is.null(processedData())) processedData() else rawData()
       # Create a formula dynamically
-      print(2)
+     ##123 
+      char_columns <- names(df)[sapply(df, function(x) is.character(x))]
+      for(char_column in char_columns)
+        df[, char_column] <- as.factor(df[, char_column])
       formula <- as.formula(paste(input$imbalanceTarget, "~ ."))
       df <- ROSE(formula, data = df, seed =123)$data
+      df <- df[, c(ncol(df), 1:(ncol(df)-1))]
       processedData(df)
   })
   observeEvent(input$applyUnder, {
         df <- if (!is.null(processedData())) processedData() else rawData()
-        print(input)
-        print("<<<<<<<<<<<<<<<")
         class_variable_name <- input$imbalanceTarget
         class_variable_name <- input$imbalanceTarget
         df[[class_variable_name]]=as.factor(df[[class_variable_name]])
@@ -1144,12 +1183,11 @@ server <- function(input, output, session) {
                                 y = df[[class_variable_name]],
                                 yname = class_variable_name)
  
+       df <- df[, c(ncol(df), 1:(ncol(df)-1))]
        processedData(df)
   })
   
 
-    
-    
   }
 read_attributes_names <- function(file_path) {
   lines <- readLines(file_path)
