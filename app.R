@@ -4,11 +4,16 @@
 
 # Installation des packages nécessaires
 
+
+options(repos = c(CRAN = "https://cran.r-project.org"))
+
 packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", 
                          "dplyr", "randomForest", "caret", "DT", 
                          "shinythemes", "ggcorrplot", "e1071", "caret", 
                          "randomForest", "rlang", "pROC", "Rtsne", 
-                         "xgboost", "gbm","virdis","ROSE","caret","bslib")
+                         "xgboost", "gbm","virdis","ROSE","caret","bslib",
+                         "plotly"
+                        )
 
 # Installation des packages s'ils ne sont pas déjà installés
 for (package in packages_to_install) {
@@ -16,7 +21,6 @@ for (package in packages_to_install) {
     install.packages(package)
   }
 }
-NO_DATA="No Data Loaded"
 
 # Chargement des libraries
 library(shiny)
@@ -42,10 +46,12 @@ library(gbm)
 library(ROSE)
 library(caret)
 library(bslib)
+library(plotly)
 
 
 
 
+NO_DATA="No Data Loaded"
 
 
 
@@ -60,7 +66,7 @@ ui <- shinyUI(
   theme = shinytheme("cerulean"),
   shinyjs::useShinyjs(),
 
-  title = "Analyse de Données Avancée",
+  title = "Machine Learning Platform",
   
   # Injection de CSS personnalisé
   
@@ -166,18 +172,18 @@ ui <- shinyUI(
                       
            ),
            ),
-           actionButton("preprocess", "Appliquer")
+           actionButton("preprocess", "Apply")
        ),
        mainPanel(
          tabsetPanel(
            tabPanel("Data Table", 
                               DTOutput("dataTablePre")
                     ),
-           tabPanel("Unidimensionnelle Visualization", 
+           tabPanel("1D Visualization", 
                     selectizeInput("selectVar", "Variable", choices = NULL),
                     uiOutput("unidimPlot"), 
                     ),
-                     tabPanel("Bidimensionnelle Visualization", 
+                     tabPanel("2D Visualization", 
 
                               fluidRow(
                                        column(3, 
@@ -187,7 +193,7 @@ ui <- shinyUI(
                                               selectizeInput("selectVar2", "Variable Y", choices = NULL),
                                        )
                                        ),
-                              plotOutput("bidimPlot"))
+                              uiOutput("bidimPlot"))
          ),
          )
        )
@@ -202,11 +208,11 @@ ui <- shinyUI(
        sidebarPanel(
          uiOutput("imbalanceTargetSelectorUI"),  # Dropdown for selecting the target variable
          br(),
-         actionButton("applySMOTE", "Apply Over Sampling(SMOTE)"),
+         actionButton("applySMOTE", "Apply Over Sampling"),
          actionButton("applyUnder", "Apply Under Sampling")
        ),
        mainPanel(
-         plotOutput("classDistributionPlot"),  # Plot to show class distribution
+         uiOutput("classDistributionPlot"),  # Plot to show class distribution
          DTOutput("dataPreview")  # Data preview after applying SMOTE
        )
      )
@@ -225,23 +231,28 @@ ui <- shinyUI(
          uiOutput("mltargetSelectorUI"),
          uiOutput("modelSelectorUI"),
          uiOutput("mlFeatureSelectorUI"),
-         #checkboxGroupInput("selectedFeatures", "Choisir les Features", choices = NULL),
+         #checkboxGroupInput("selectedFeatures", "Choose The Features", choices = NULL),
          conditionalPanel(
            condition = "input.modelType == 'k-Nearest Neighbors'",
-           numericInput("numNeighbors", "Nombre de voisins (k):", value = 5, min = 1)
+           numericInput("numNeighbors", "Number of Neighbors (k):", value = 5, min = 1)
          ),
          checkboxInput("crossValidation", "Apply cross validation", value = FALSE),
-         numericInput("numFolds", "Nombre de plis pour la validation croisée", value = 10, min = 2),
+         numericInput("numFolds", "Number of folds", value = 10, min = 2),
          
          actionButton("trainModel", "Train The model")
        ),
        mainPanel(
          tabsetPanel(
-           tabPanel("Résultats d'Évaluation",
-                    verbatimTextOutput("modelMetrics"),
-                    plotOutput("rocPlot")),  # Ajout d'un plot pour la courbe ROC
+           tabPanel("Evaluatoin Results",
+                  fluidRow(
+                          column(6, 
+                    plotOutput("rocPlot")),
+                          column(6, 
+                    verbatimTextOutput("modelMetrics")),
+                          )),  # Ajout d'un plot pour la courbe ROC
            tabPanel("Feature Importance",
-                    plotOutput("featureImportancePlot"))
+                    plotOutput("featureImportancePlot")
+           )
          )
        )
      )),NoDataMessage
@@ -721,46 +732,47 @@ server <- function(input, output, session) {
       theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
 
     fluidRow(
-                    column(6,renderPlot({scatter_plt})), 
-                    column(6,renderPlot({box_plt})))
+                    column(6,renderPlotly({scatter_plt})), 
+                    column(6,renderPlotly({box_plt})))
     }
     else if (length(unique(df[[input$selectVar]]))<20){
            your_data_factor <- within(df, {
         selected_factor <- factor(df[[input$selectVar]])
       })
       
+       variable=factor(df[[input$selectVar]])
        bar_plt=  
-          ggplot(df, aes(x = factor(df[[input$selectVar]]), fill = factor(df[[input$selectVar]]))) +
-         geom_bar() +
+          ggplot(df, aes(x = variable)) +
+         geom_bar(fill = "skyblue", color = "black") +
           labs(title = "Categorical Columns Stacked Bar Plot",
             x = input$selectVar,
             y = "Count",
-            fill=input$selectVar
           ) 
 
         fluidRow(
-             column(12,renderPlot({bar_plt}))
+             column(12,renderPlotly({bar_plt}))
              )
   }
   })
 
   # Génération des graphiques bidimensionnels avec indicateur de corrélation
-  output$bidimPlot <- renderPlot({
+  output$bidimPlot <- renderUI({
     df <- if ( !is.null(processedData())) processedData() else rawData()
     req(df)
     numeric_columns <- names(df)[sapply(df, function(x) is.numeric(x) | is.integer(x))]
     category_columns <- names(df)[sapply(df, function(x) length(unique(x))<20)]
      if (input$selectVar1 %in% category_columns || input$selectVar2 %in% category_columns) {
        if(input$selectVar1 %in% category_columns && input$selectVar2 %in% category_columns){
-            col1 <- factor(df[[input$selectVar1]])
-            col2 <- factor(df[[input$selectVar2]])
-          ggplot(df, aes(x = col1, fill = col2)) +
+            X <- factor(df[[input$selectVar1]])
+            Y <- factor(df[[input$selectVar2]])
+          renderPlotly({ggplot(df, aes(x = X, fill = Y)) +
           geom_bar() +
           labs(title = "Categorical Columns Stacked Bar Plot",
             x = input$selectVar1,
             y =input$selectVar2,
             fill = input$selectVar2
           ) 
+             })
 
        }
        else{
@@ -771,16 +783,20 @@ server <- function(input, output, session) {
         selected_factor <- input$selectVar2
         selected_num <- input$selectVar1
        }
-      selected_factor_val <- factor(df[[selected_factor]])
-      selected_num_val <- df[[selected_num]]
+      X <- factor(df[[selected_factor]])
+      Y <- df[[selected_num]]
 
-      ggplot(df, aes(x =selected_factor_val, y =selected_num_val)) +
+
+      renderPlotly({
+        ggplot(df, aes(x =X, y =Y)) +
       geom_violin(fill="skyblue",alpha=0.2)+
       geom_boxplot(fill = "skyblue", color = "black",alpha=0.9) +
       stat_boxplot(geom = "errorbar",
                width = 0.15) +
       labs(title = paste("Boxplot of ", selected_num, "by Category ",selected_factor), x =selected_factor, y = selected_num)
+       })
        }
+
     } else if (input$selectVar1 %in% numeric_columns && input$selectVar2 %in% numeric_columns) {
       cor_value <- cor(df[[input$selectVar1]], df[[input$selectVar2]], use = "complete.obs")
       p <- ggplot(df, aes_string(x = input$selectVar1, y = input$selectVar2)) + 
@@ -792,32 +808,35 @@ server <- function(input, output, session) {
         annotate("text", x = Inf, y = Inf, label = paste("Correlatoin:", round(cor_value, 2)), 
                  hjust = 1.1, vjust = 1.1, size = 5, fontface = "bold")
       margin_type <- "histogram"
-      p <- ggExtra::ggMarginal(p, type = margin_type, margins = "both",
-        size = 8)
+      #:widthp <- ggExtra::ggMarginal(p, type = margin_type, margins = "both",
+      #:width  size = 8)
 
-      p
+      renderPlotly({p})
     }
   })
 
   # Génération du Box Plot
-  output$boxPlot <- renderPlot({
+  output$boxPlot <- renderUI({
     df <- if ( !is.null(processedData())) processedData() else rawData()
     req(df)
+    a=2
 
     if (is.numeric(df[[input$selectVar]])) {
-      ggplot(df, aes_string(y = input$selectVar)) + 
+      renderPlotly({ggplot(df, aes_string(y = input$selectVar)) + 
         geom_boxplot() + 
         theme_minimal() +
         ggtitle(paste("Box Plot :", input$selectVar)) + 
         theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+        })
     } else {
-      plot(NULL, xlim = c(0, 1), ylim = c(0, 1), type = "n", xlab = "", ylab = "")
+      renderPlotly({plot(NULL, xlim = c(0, 1), ylim = c(0, 1), type = "n", xlab = "", ylab = "")
       text(0.5, 0.5, "Sélectionnez une variable numérique", cex = 1.2, col = "red")
+        })
     }
   })
 
   # Génération du graphique de matrice de corrélation
-  output$corrPlot <- renderPlot({
+  output$corrPlot <- renderPlotly({
     df <- if (input$enablePreprocess && !is.null(processedData())) processedData() else rawData()
     req(df)
 
@@ -835,6 +854,13 @@ server <- function(input, output, session) {
 
   # MACHINE LEARNING :
 
+  output$rocPlot <- renderPlot({
+      text(0.5, 0.5, "No Results",cex = 1.5)
+      })
+  output$featureImportancePlot <- renderPlot({
+      text(0.5, 0.5, "No Results",cex = 1.5)
+      })
+
   # Génération des sélecteurs de features et target
   output$mlFeatureSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
@@ -842,7 +868,7 @@ server <- function(input, output, session) {
     req(df)
     card(
      card_body(
-    checkboxGroupInput("_", "Choisir les Features", choices = NULL),
+    checkboxGroupInput("_", "Choose atleast 2 Features", choices = NULL),
     card(
       height = 300,
     card_body(
@@ -858,9 +884,9 @@ server <- function(input, output, session) {
     req(df)
     varTypes <- sapply(df, class)
     selectInput("modelType", "Choose the model",
-                     choices = c("Logistic Regression", "Random Forest",
+                     choices = c( "Random Forest",
                                  "k-Nearest Neighbors", "Decision Tree", 
-                                 "Gradient Boosting Machines", "XGBoost"))
+                                 "Gradient Boosting Machines", "XGBoost","Logistic Regression"))
 
   })
   observeEvent(input$mlselectedTarget,{
@@ -893,6 +919,13 @@ server <- function(input, output, session) {
 #                }
 #
 #  })
+output$modelSummary <- renderPrint({
+        print(model)
+      })
+
+  output$modelMetrics <- renderPrint({
+       print("No Results") 
+      })
 
   output$mltargetSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
@@ -902,6 +935,7 @@ server <- function(input, output, session) {
 
   # Entraînement et évaluation des modèles
   observeEvent(input$trainModel, {
+
     df <- if (!is.null(processedData())) processedData() else rawData()
     #if(input$mlSelectedFeatures){}
     if(length(input$mlSelectedFeatures)<2){
@@ -910,6 +944,7 @@ server <- function(input, output, session) {
       })
     }
     else{
+    used_cv=input$crossValidation
     #req(length(input$mlSelectedFeatures)>1)
     df_comp<- na.omit(df[c(input$mlselectedTarget,input$mlSelectedFeatures)])
     
@@ -978,44 +1013,48 @@ server <- function(input, output, session) {
     # Prédiction et évaluation
     if (!is.null(model)) {
       predictions <- predict(model, newdata = testData)
-      confusionMatrix <- confusionMatrix(predictions, testTarget)
+      cm <- confusionMatrix(predictions, testTarget)
       
       output$modelMetrics <- renderPrint({
         # Affichage des métriques de performance
-        metrics <- confusionMatrix$overall
-        cat("Accuracy:", metrics["Accuracy"], "\n")
-        
-        # Calcul et affichage de précision, rappel et F-score
-        precision <- posPredValue(predictions, testTarget)
-        sensitivity <- sensitivity(predictions, testTarget)
-        specificity <- specificity(predictions, testTarget)
-        fscore <- (2 * precision * sensitivity) / (precision + sensitivity)
-        
-        cat("Precision:", precision, "\n",
-            "Recall (Sensitivity):", sensitivity, "\n",
-            "Specificity:", specificity, "\n",
-            "F-score:", fscore, "\n")
+        if(used_cv){
+        overall_confusion_matrix <- confusionMatrix(model$pred$pred, model$pred$obs)
+        cat("Results in cross validation\n")
+        print(overall_confusion_matrix)
+        }
+        else{
+        cat("Results on testing set(20%)\n")
+        print(cm)
+        }
       })
       
       # Courbe ROC et AUC
       output$rocPlot <- renderPlot({
         probPred <- predict(model, newdata = testData, type = "prob")
         rocCurve <- roc(response = testTarget, predictor = probPred[,2])
-        if (input$modelType != "Decision Trees"){
+        if (input$modelType != "Decision Tree"){
           # Ajouter une interpolation
           plot(rocCurve, main = "ROC Curve")
           # Afficher l'AUC dans le titre ou comme une légende
           aucValue <- auc(rocCurve)
           legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
         }
+        else{
+          plot.new()
+          text(0.5, 0.5, "ROC not available for Decision Trees",
+               cex = 1.5)
+        }
+
       })
+      model_type=input$modelType
       
       # Feature Importance Plot
       output$featureImportancePlot <- renderPlot({
-        if (input$modelType == "Forêts Aléatoires") {
-          varImpPlot <- varImp(model, scale = FALSE)
+        if (model_type == "Random Forest") {
+          print(abs(-2))
+          varImpPlot <- varImp(model)
           plot(varImpPlot)
-        } else if (input$modelType == "Logistic Regression" && !is.null(model)) {
+        } else if (model_type == "Logistic Regression" && !is.null(model)) {
           # Extract coefficients and convert them to absolute values
           coef_data <- as.data.frame(abs(coef(model$finalModel)[-1])) # Excluding intercept
           names(coef_data) <- c("Importance")
@@ -1026,14 +1065,14 @@ server <- function(input, output, session) {
             xlab("Feature") +
             ylab("Absolute Coefficient") +
             ggtitle("Feature Importance for Logistic Regression (Absolute Coefficients)")
-        } else if (input$modelType == "k-Nearest Neighbors") {
+        } else if (model_type == "k-Nearest Neighbors") {
           plot.new()
           text(0.5, 0.5, "Feature importance is not applicable for k-Nearest Neighbors",
                cex = 1.5)
-        }else if (input$modelType == "Gradient Boosting Machines" && !is.null(model)) {
+        }else if (model_type == "Gradient Boosting Machines" && !is.null(model)) {
           varImpPlot <- varImp(model, scale = FALSE)
           plot(varImpPlot)
-        } else if (input$modelType == "XGBoost" && !is.null(model)) {
+        } else if (model_type == "XGBoost" && !is.null(model)) {
           xgbImp <- xgb.importance(feature_names = model$xNames, model = model$finalModel)
           xgb.plot.importance(importance_matrix = xgbImp)
         } else {
@@ -1085,7 +1124,7 @@ server <- function(input, output, session) {
                  }
 
                  # Output: Plot
-                 output$dimRedPlot <- renderPlot({
+                 output$dimRedPlot <- renderPlotly({
                    # Check if the result has data and use the actual column names from the result
                    if (!is.null(result) && ncol(result) >= 2) {
                      # Using actual column names
@@ -1142,7 +1181,7 @@ server <- function(input, output, session) {
   })
     
   # Show class distribution for the selected target variable
-  output$classDistributionPlot <- renderPlot({
+  output$classDistributionPlot <- renderUI({
       df <- if (!is.null(processedData())) processedData() else rawData()
       targetVar <- input$imbalanceTarget
 
@@ -1150,13 +1189,17 @@ server <- function(input, output, session) {
       req(input$imbalanceTarget)
       class_counts <- table(df[[input$imbalanceTarget]])
 
-      barplot(class_counts, 
+      
+       renderPlot({ 
+         barplot(class_counts, 
               main = "Distribution des Classes", 
               xlab = "Classes", 
               ylab = "Fréquence",
               col = "skyblue",  # You can choose different colors
               names.arg = names(class_counts))
+                     })
     })
+
     
     
   # Apply SMOTE and show the updated data using the 'grt' package
@@ -1169,7 +1212,7 @@ server <- function(input, output, session) {
         df[, char_column] <- as.factor(df[, char_column])
       formula <- as.formula(paste(input$imbalanceTarget, "~ ."))
       df <- ROSE(formula, data = df, seed =123)$data
-      df <- df[, c(ncol(df), 1:(ncol(df)-1))]
+     # df <- df[, c(ncol(df), 1:(ncol(df)-1))]
       processedData(df)
   })
   observeEvent(input$applyUnder, {
