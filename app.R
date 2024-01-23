@@ -892,8 +892,8 @@ server <- function(input, output, session) {
   observeEvent(input$mlselectedTarget,{
     df <- if (!is.null(processedData())) processedData() else rawData()
     req(df)
-                models=c( "Random Forest", 
-                              "k-Nearest Neighbors", "Decision Tree", 
+                models=c( "Decision Tree","Random Forest", 
+                              "k-Nearest Neighbors",  
                               "Gradient Boosting Machines", "XGBoost")
                 if(n_distinct(df[[input$mlselectedTarget]], na.rm = FALSE) <3){
                   updateSelectInput(session,"modelType",choices=c(models,"Logistic Regression"))
@@ -1032,7 +1032,8 @@ output$modelSummary <- renderPrint({
       output$rocPlot <- renderPlot({
         probPred <- predict(model, newdata = testData, type = "prob")
         rocCurve <- roc(response = testTarget, predictor = probPred[,2])
-        if (input$modelType != "Decision Tree"){
+        model_type=input$modelType
+        if (model_type != "Decision Tree"){
           # Ajouter une interpolation
           plot(rocCurve, main = "ROC Curve")
           # Afficher l'AUC dans le titre ou comme une légende
