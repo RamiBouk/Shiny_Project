@@ -6,6 +6,7 @@
 
 
 options(repos = c(CRAN = "https://cran.r-project.org"))
+options(shiny.maxRequestSize=200*1024^2)
 
 packages_to_install <- c("shiny","shinyjs", "ggplot2","editData", 
                          "dplyr", "randomForest", "caret", "DT", 
@@ -189,6 +190,9 @@ ui <- shinyUI(
                                               ),
                                        column(9, 
                                               selectizeInput("selectVar2", "Variable Y", choices = NULL),
+                                       ),
+                                       column(12, 
+                                              selectizeInput("selectVarT", "target", choices = NULL),
                                        )
                                        ),
                               uiOutput("bidimPlot"))
@@ -339,6 +343,7 @@ server <- function(input, output, session) {
   updateSelectInput(session, "selectVar", choices =column) 
   updateSelectInput(session, "selectVar1", choices = column)
   updateSelectInput(session, "selectVar2", choices = column)
+  updateSelectInput(session, "selectVarT", choices = column)
   observeEvent(input$load, {
                  # Read .data file
                  df <- read.csv(input$dataFile$datapath,na.strings = c("", "NA", "?"))
@@ -352,6 +357,7 @@ server <- function(input, output, session) {
                  updateSelectInput(session, "selectVar", choices =column) 
                  updateSelectInput(session, "selectVar1", choices = column)
                  updateSelectInput(session, "selectVar2", choices = column)
+                 updateSelectInput(session, "selectVarT", choices = column)
   })
 
 
@@ -473,6 +479,7 @@ server <- function(input, output, session) {
                  selected_var <- input$selectVar
                  selected_var1 <- input$selectVar1
                  selected_var2 <- input$selectVar2
+                 selected_varT <- input$selectVarT
 
                  # Gestion des outliers
                  varTypes <- sapply(df, class)
