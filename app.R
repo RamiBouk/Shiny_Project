@@ -82,11 +82,9 @@ ui <- shinyUI(
   tabPanel("Data Loading & Overview",
            sidebarLayout(
              sidebarPanel(
-               h3("Chargement des Données"),
+               h3("Select Data"),
                fileInput("dataFile", "Choose .csv file"),
-              # fileInput("namesFile", "Choose .names file"),
-
-               actionButton("load", "Charger les Données")
+               actionButton("load", "Load")
              ),
              mainPanel(
                conditionalPanel(
