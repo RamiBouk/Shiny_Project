@@ -2,7 +2,7 @@
 ## - fix the the columns disabpearing when  nromalizaotin
 ## - fix normalize constant columns
 
-# Installation des packages nécessaires
+# Installing required packages 
 
 
 options(repos = c(CRAN = "https://cran.r-project.org"))
@@ -178,11 +178,10 @@ ui <- shinyUI(
            tabPanel("Data Table", 
                               DTOutput("dataTablePre")
                     ),
-           tabPanel("1D Visualization", 
-                    selectizeInput("selectVar", "Variable", choices = NULL),
-                    uiOutput("unidimPlot"), 
+           tabPanel("Correlation", 
+                    uiOutput("correlationPlot"), 
                     ),
-                     tabPanel("2D Visualization", 
+            tabPanel("2D Visualization", 
 
                               fluidRow(
                                        column(3, 
@@ -195,7 +194,11 @@ ui <- shinyUI(
                                               selectizeInput("selectVarT", "target", choices = NULL),
                                        )
                                        ),
-                              uiOutput("bidimPlot"))
+                              uiOutput("bidimPlot")),
+           tabPanel("1D Visualization", 
+                    selectizeInput("selectVar", "Variable", choices = NULL),
+                    uiOutput("unidimPlot"), 
+                    ),
          ),
          )
        )
@@ -259,38 +262,6 @@ ui <- shinyUI(
        )
      )),NoDataMessage
   ),
-  
- # # PCA 
- # tabPanel("Dimensionality Reduction",
- #  conditionalPanel(
- #   condition = "output.dataLoaded",
- #    sidebarLayout(
- #      sidebarPanel(
- #        h4("Réduction de la Dimension"),
- #        selectInput("dimReductionMethod", "Méthode:",
- #                    choices = c("PCA", "t-SNE")),
- #        numericInput("numComponents", "Nombre de composants:", value = 2, min = 1),
- #   checkboxGroupInput("", "Choisir les Features", choices = NULL),
- #   card(
- #     height = 350,
- #   style = "resize:vertical;",
- #   card_body(
- #        checkboxGroupInput("selectedFeatures", "", choices = NULL)
- #   )
- # ),
- #        #uiOutput("dimRedFeatureSelectorUI"),
- #        actionButton("runDimReduction", "Exécuter la Réduction de Diension")
- #      ),
- #      mainPanel(
- #        tabsetPanel(
- #          tabPanel("Plot", plotOutput("dimRedPlot")),
- #          tabPanel("Summary", verbatimTextOutput("dimRedSummary"))
- #        )
- #      )
- #    ),NoDataMessage
- #    )
- # )
-  
   
 ))
 
@@ -819,6 +790,45 @@ server <- function(input, output, session) {
       renderPlotly({p})
     }
   })
+output$correlationPlot <- renderUI({
+    df <- if (!is.null(processedData())) processedData() else rawData()
+
+    # Select only numeric variables from the dataset
+    numeric_vars <- df %>% select_if(is.numeric)
+
+    # Ensure there are at least two numeric columns to compute correlation
+    if (ncol(numeric_vars) > 1) {
+        # Calculate the correlation matrix
+        correlation_matrix <- cor(numeric_vars, use = "complete.obs")
+
+        # Melt the correlation matrix into long format for ggplot
+        corr_melted <- reshape2::melt(correlation_matrix)
+
+        # Create the correlation matrix heatmap
+        corr_plot <- ggplot(corr_melted, aes(Var1, Var2, fill = value)) +
+            geom_tile(color = "white") +
+            scale_fill_gradient2(low = "red", high = "blue", mid = "white",
+                                 midpoint = 0, limit = c(-1, 1), space = "Lab",
+                                 name = "Correlation") +
+            #theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                             size = 12, hjust = 1),
+                  axis.text.y = element_text(size = 12)) +
+            coord_fixed() +
+            ggtitle("Correlation Matrix") +
+            theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+
+        # Render the plot
+        fluidRow(
+            column(12, renderPlotly({ggplotly(corr_plot) %>% layout(height = 700)})) 
+        )
+    } else {
+        # If there are no or only one numeric column, show a message
+        fluidRow(
+            column(12, "Not enough numeric variables to compute a correlation matrix.")
+        )
+    }
+})
 
   # Génération du Box Plot
   output$boxPlot <- renderUI({
@@ -859,14 +869,13 @@ server <- function(input, output, session) {
 
   # MACHINE LEARNING :
 
+  ## intialize the plot
   output$rocPlot <- renderPlot({
       text(0.5, 0.5, "No Results",cex = 1.5)
       })
   output$featureImportancePlot <- renderPlot({
       text(0.5, 0.5, "No Results",cex = 1.5)
       })
-
-  # Génération des sélecteurs de features et target
   output$mlFeatureSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
     #depend on modelType
@@ -891,7 +900,12 @@ server <- function(input, output, session) {
     selectInput("modelType", "Choose the model",
                      choices = c( "Random Forest",
                                  "k-Nearest Neighbors", "Decision Tree", 
-                                 "Gradient Boosting Machines", "XGBoost","Logistic Regression"))
+                                 "Gradient Boosting Machines",
+                                 "XGBoost",
+                                 "Logistic Regression",
+                                 "Lineare SVM",
+                                 "Kernel SVM"))
+
 
   })
   observeEvent(input$mlselectedTarget,{
@@ -899,7 +913,11 @@ server <- function(input, output, session) {
     req(df)
                 models=c( "Decision Tree","Random Forest", 
                               "k-Nearest Neighbors",  
-                              "Gradient Boosting Machines", "XGBoost")
+                              "Gradient Boosting Machines", 
+                              "XGBoost",
+                              "Lineare SVM",
+                              "Kernel SVM")
+
                 if(n_distinct(df[[input$mlselectedTarget]], na.rm = FALSE) <3){
                   updateSelectInput(session,"modelType",choices=c(models,"Logistic Regression"))
                 }
