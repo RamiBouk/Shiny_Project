@@ -61,6 +61,7 @@ NoDataMessage <- conditionalPanel(
                  condition = "! output.dataLoaded",
                  h2(NO_DATA)
                )
+all_features_selected=FALSE
 ui <- shinyUI(
 
   navbarPage( id="navbarPage",
@@ -876,22 +877,63 @@ output$correlationPlot <- renderUI({
   output$featureImportancePlot <- renderPlot({
       text(0.5, 0.5, "No Results",cex = 1.5)
       })
+  # UI for feature selection based on column type
   output$mlFeatureSelectorUI <- renderUI({
-    df <- if (!is.null(processedData())) processedData() else rawData()
-    #depend on modelType
-    req(df)
-    card(
-     card_body(
-    checkboxGroupInput("_", "Choose atleast 2 Features", choices = NULL),
-    card(
-      height = 300,
-    card_body(
-    checkboxGroupInput("mlSelectedFeatures", NULL, choices = names(df)[names(df)!=input$mlselectedTarget])
-    )
-    )
-    )
-  )
-
+      df <- if (!is.null(processedData())) processedData() else rawData()
+      req(df)
+      req(input$modelType)
+  
+      # Check if trainModel starts with "SVM"
+      if (startsWith(input$modelType, "SVM")) {
+          # Filter numeric columns only
+          availableFeatures <- names(df)[sapply(df, is.numeric)]
+      } else {
+          # Use all column names if not SVM
+          availableFeatures <- names(df)
+      }
+  
+      # UI for selecting features with a "Select All" button
+      card(
+          card_body(
+              checkboxGroupInput("_", "Choose at least 2 Features", choices = NULL),
+              card(
+                  height = 300,
+                  card_body(
+                      checkboxGroupInput("mlSelectedFeatures", NULL, 
+                                         choices = availableFeatures[availableFeatures != input$mlselectedTarget])
+                  )
+              ),
+              # Adding a "Select All" button
+              actionButton("selectAllBtn", "Select All / Unselect All")
+          )
+      )
+  })
+  
+  # Variable to track whether features are selected or not
+  selectedState <- reactiveVal(FALSE)
+  
+  # Observer to handle "Select All / Unselect All" button click
+  observeEvent(input$selectAllBtn, {
+      df <- if (!is.null(processedData())) processedData() else rawData()
+      
+      # Check if trainModel starts with "SVM"
+      availableFeatures <- if (startsWith(input$modelType, "SVM")) {
+          names(df)[sapply(df, is.numeric)]
+      } else {
+          names(df)
+      }
+      
+      # Toggle logic for selecting/unselecting features
+      if (selectedState()) {
+          # Unselect everything
+          updateCheckboxGroupInput(session, "mlSelectedFeatures", selected = character(0))
+          selectedState(FALSE)  # Set state to unselected
+      } else {
+          # Select all features except the target
+          selectedFeatures <- availableFeatures[availableFeatures != input$mlselectedTarget]
+          updateCheckboxGroupInput(session, "mlSelectedFeatures", selected = selectedFeatures)
+          selectedState(TRUE)  # Set state to selected
+      }
   })
   output$modelSelectorUI <- renderUI({
     df <- if (!is.null(processedData())) processedData() else rawData()
@@ -903,8 +945,8 @@ output$correlationPlot <- renderUI({
                                  "Gradient Boosting Machines",
                                  "XGBoost",
                                  "Logistic Regression",
-                                 "Lineare SVM",
-                                 "Kernel SVM"))
+                                 "SVM (Lineare)",
+                                 "SVM (RBF Kernel)"))
 
 
   })
@@ -914,12 +956,12 @@ output$correlationPlot <- renderUI({
                 models=c( "Decision Tree","Random Forest", 
                               "k-Nearest Neighbors",  
                               "Gradient Boosting Machines", 
-                              "XGBoost",
-                              "Lineare SVM",
-                              "Kernel SVM")
+                              "XGBoost")
 
                 if(n_distinct(df[[input$mlselectedTarget]], na.rm = FALSE) <3){
-                  updateSelectInput(session,"modelType",choices=c(models,"Logistic Regression"))
+                  updateSelectInput(session,"modelType",choices=c(models,"Logistic Regression",
+                              "SVM (Lineare)",
+                              "SVM (RBF Kernel)"))
                 }
                 else{
                   updateSelectInput(session,"modelType",choices=models)
@@ -958,160 +1000,161 @@ output$modelSummary <- renderPrint({
 
   # Entraînement et évaluation des modèles
   observeEvent(input$trainModel, {
+  
+      df <- if (!is.null(processedData())) processedData() else rawData()
+      if(length(input$mlSelectedFeatures)<2){
+        output$rocPlot <- renderPlot({
+          text(0.5, 0.5, "Select at least 2 features", cex = 1.5)
+        })
+      } else {
+        used_cv <- input$crossValidation
+        df_comp <- na.omit(df[c(input$mlselectedTarget, input$mlSelectedFeatures)])
+      
+        # Separate features and target
+        targetName <- input$mlselectedTarget
+        target <- as.factor(df_comp[[targetName]])
+        levels(target) <- make.names(levels(target))
+        features <- df_comp[, input$mlSelectedFeatures]
+      
+        # Split data into training and testing sets
+        partitions <- createDataPartition(target, p = .8, list = TRUE)
+        trainIndex <- partitions[[1]] 
+        trainData <- features[trainIndex, ]
+        trainTarget <- target[trainIndex]
+        testData <- features[-trainIndex, ]
+        testTarget <- target[-trainIndex]
 
-    df <- if (!is.null(processedData())) processedData() else rawData()
-    #if(input$mlSelectedFeatures){}
-    if(length(input$mlSelectedFeatures)<2){
-      output$rocPlot <- renderPlot({
-      text(0.5, 0.5, "Select atleast 2 features",cex = 1.5)
-      })
-    }
-    else{
-    used_cv=input$crossValidation
-    #req(length(input$mlSelectedFeatures)>1)
-    df_comp<- na.omit(df[c(input$mlselectedTarget,input$mlSelectedFeatures)])
-    
-    # Séparation des features et de la target
-    targetName <- input$mlselectedTarget
-    target <- as.factor(df_comp[[targetName]])
-    levels(target) <- make.names(levels(target))
-    features <- df_comp[, input$mlSelectedFeatures]
-    
-    # Division des données en ensembles d'entraînement et de test
-    partitions <- createDataPartition(target, p = .8, list = TRUE)
-    trainIndex <- partitions[[1]]  # Extrait correctement les indices
-    trainData <- features[trainIndex, ]
-    trainTarget <- target[trainIndex]
-    testData <- features[-trainIndex, ]
-    testTarget <- target[-trainIndex]
-    
-    # Configuration du contrôle d'entraînement avec ou sans validation croisée
-    control <- trainControl(method = if (input$crossValidation) "cv" else "none",
-                            number = if (input$crossValidation) input$numFolds else 1,
-                            summaryFunction = twoClassSummary,
-                            classProbs = TRUE,
-                            savePredictions = TRUE)
-    
-    # Entraînement du modèle
-    model <- NULL
-    if (input$modelType == "Logistic Regression") {
-      model <- train(x = trainData, y = trainTarget, method = "glm", 
-                     family = "binomial",
-                     trControl = control)
-      
-    } else if (input$modelType == "Random Forest") {
-      model <- train(x = trainData, y = trainTarget, method = "rf", 
-                     trControl = control, 
-                     metric = "Accuracy",
-                     importance = TRUE)
-    } else if (input$modelType == "k-Nearest Neighbors") {
-      tuneGrid <- expand.grid(k = input$numNeighbors)
-      model <- train(x = trainData, y = trainTarget, method = "knn", 
-                     trControl = control,
-                     tuneGrid = tuneGrid)
-    } else if (input$modelType == "Decision Tree") {
-      model <- train(x = trainData, y = trainTarget, method = "rpart", 
-                     trControl = control)
-    } else if (input$modelType == "Gradient Boosting Machines") {
-      model <- train(x = trainData, y = trainTarget, method = "gbm", 
-                     trControl = control,
-                     verbose = FALSE)
-    }else if (input$modelType == "XGBoost") {
-      tuneGridXGB <- expand.grid(
-        nrounds = 100, 
-        max_depth = 3, 
-        eta = 0.3, 
-        gamma = 0,
-        colsample_bytree = 1,
-        min_child_weight = 1,
-        subsample = 1
-      )
-      
-      model <- train(x = trainData, y = trainTarget, method = "xgbTree", 
-                     trControl = control,
-                     tuneGrid = tuneGridXGB,
-                     verbose = FALSE) 
-    }
-    
-    # Prédiction et évaluation
-    if (!is.null(model)) {
-      predictions <- predict(model, newdata = testData)
-      cm <- confusionMatrix(predictions, testTarget)
-      
-      output$modelMetrics <- renderPrint({
-        # Affichage des métriques de performance
-        if(used_cv){
-        overall_confusion_matrix <- confusionMatrix(model$pred$pred, model$pred$obs)
-        cat("Results in cross validation\n")
-        print(overall_confusion_matrix)
-        }
-        else{
-        cat("Results on testing set(20%)\n")
-        print(cm)
-        }
-      })
-      
-      # Courbe ROC et AUC
-      output$rocPlot <- renderPlot({
-        probPred <- predict(model, newdata = testData, type = "prob")
-        rocCurve <- roc(response = testTarget, predictor = probPred[,2])
-        model_type=input$modelType
-        if (model_type != "Decision Tree"){
-          # Ajouter une interpolation
-          plot(rocCurve, main = "ROC Curve")
-          # Afficher l'AUC dans le titre ou comme une légende
-          aucValue <- auc(rocCurve)
-          legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
-        }
-        else{
-          plot.new()
-          text(0.5, 0.5, "ROC not available for Decision Trees",
-               cex = 1.5)
-        }
+        # Handle factor columns: Convert factors to dummy variables
+        dummies <- dummyVars(~ ., data = features) 
+        features <- predict(dummies, newdata = features)  
 
-      })
-      model_type=input$modelType
+        column_types <- sapply(features, class)
       
-      # Feature Importance Plot
-      output$featureImportancePlot <- renderPlot({
-        if (model_type == "Random Forest") {
-          print(abs(-2))
-          varImpPlot <- varImp(model)
-          plot(varImpPlot)
-        } else if (model_type == "Logistic Regression" && !is.null(model)) {
-          # Extract coefficients and convert them to absolute values
-          coef_data <- as.data.frame(abs(coef(model$finalModel)[-1])) # Excluding intercept
-          names(coef_data) <- c("Importance")
-          coef_data$Feature <- rownames(coef_data)
-          ggplot(coef_data, aes(x = reorder(Feature, Importance), y = Importance)) +
-            geom_bar(stat = "identity") +
-            coord_flip() +
-            xlab("Feature") +
-            ylab("Absolute Coefficient") +
-            ggtitle("Feature Importance for Logistic Regression (Absolute Coefficients)")
-        } else if (model_type == "k-Nearest Neighbors") {
-          plot.new()
-          text(0.5, 0.5, "Feature importance is not applicable for k-Nearest Neighbors",
-               cex = 1.5)
-        }else if (model_type == "Gradient Boosting Machines" && !is.null(model)) {
-          varImpPlot <- varImp(model, scale = FALSE)
-          plot(varImpPlot)
-        } else if (model_type == "XGBoost" && !is.null(model)) {
-          xgbImp <- xgb.importance(feature_names = model$xNames, model = model$finalModel)
-          xgb.plot.importance(importance_matrix = xgbImp)
-        } else {
-          plot.new()
-          text(0.5, 0.5, "Feature importance not available for the selected model",
-               cex = 1.5)
+        # Train control configuration with or without cross-validation
+        control <- trainControl(
+          method = if (input$crossValidation) "cv" else "none",
+          number = if (input$crossValidation) input$numFolds else 1,
+          summaryFunction = twoClassSummary,
+          classProbs = TRUE,
+          savePredictions = TRUE
+        )
+      
+        # Train model
+        model <- NULL
+        if (input$modelType == "Logistic Regression") {
+          model <- train(x = trainData, y = trainTarget, method = "glm", 
+                         family = "binomial", trControl = control)
+          
+        } else if (input$modelType == "Random Forest") {
+          model <- train(x = trainData, y = trainTarget, method = "rf", 
+                         trControl = control, metric = "Accuracy", importance = TRUE)
+  
+        } else if (input$modelType == "k-Nearest Neighbors") {
+          tuneGrid <- expand.grid(k = input$numNeighbors)
+          model <- train(x = trainData, y = trainTarget, method = "knn", 
+                         trControl = control, tuneGrid = tuneGrid)
+  
+        } else if (input$modelType == "Decision Tree") {
+          model <- train(x = trainData, y = trainTarget, method = "rpart", 
+                         trControl = control)
+  
+        } else if (input$modelType == "Gradient Boosting Machines") {
+          model <- train(x = trainData, y = trainTarget, method = "gbm", 
+                         trControl = control, verbose = FALSE)
+  
+        } else if (input$modelType == "XGBoost") {
+          tuneGridXGB <- expand.grid(
+            nrounds = 100, max_depth = 3, eta = 0.3, gamma = 0,
+            colsample_bytree = 1, min_child_weight = 1, subsample = 1
+          )
+          model <- train(x = trainData, y = trainTarget, method = "xgbTree", 
+                         trControl = control, tuneGrid = tuneGridXGB, verbose = FALSE) 
+        
+        # Add SVM without kernel (Linear)
+        } else if (input$modelType =="SVM (Lineare)" ) {
+          # Filter only numeric columns in trainData and testData
+          model <- train(x = trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmLinear", 
+                         trControl = control)
+        
+        # Add SVM with kernel (Radial Basis Function)
+        } else if (input$modelType == "SVM (RBF Kernel)") {
+          tuneGridSVM <- expand.grid(sigma = 0.1, C = 1)  # You can modify sigma and C based on user input
+          print('...training')
+          model <- train(x =trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmRadial", 
+                         trControl = control, tuneGrid = tuneGridSVM)
         }
-      })
-      
-    }
-    
-    
-
-  }})
-
+        print('training done')
+        print('evaluating...')
+        # Prediction and evaluation
+        if (!is.null(model)) {
+          if(input$modelType =="SVM (Lineare)" || input$modelType =="SVM (RBF Kernel)"){
+            predictions <- predict(model, newdata = testData %>% select(where(is.numeric)))
+          } else {
+            predictions <- predict(model, newdata = testData )}
+          print('________________________________prediction')
+          cm <- confusionMatrix(predictions, testTarget)
+        
+          output$modelMetrics <- renderPrint({
+            if (used_cv) {
+              overall_confusion_matrix <- confusionMatrix(model$pred$pred, model$pred$obs)
+              cat("Results in cross validation\n")
+              print(overall_confusion_matrix)
+            } else {
+              cat("Results on testing set (20%)\n")
+              print(cm)
+            }
+          })
+          model_type <- input$modelType
+        
+          # ROC Curve and AUC
+          output$rocPlot <- renderPlot({
+            probPred <- predict(model, newdata = testData, type = "prob")
+            rocCurve <- roc(response = testTarget, predictor = probPred[,2])
+            if (model_type != "Decision Tree" ||model_type !="SVM (Lineare)"  || model_type !="SVM (RBF Kernel)") {
+              plot(rocCurve, main = "ROC Curve")
+              aucValue <- auc(rocCurve)
+              legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
+            } else {
+              plot.new()
+              text(0.5, 0.5, "ROC not available for Decision Trees", cex = 1.5)
+            }
+          })
+          print('evaluation done')
+          print('plotting...')
+        
+          # Feature Importance Plot
+          output$featureImportancePlot <- renderPlot({
+            if (model_type == "Random Forest") {
+              varImpPlot <- varImp(model)
+              plot(varImpPlot)
+            } else if (model_type == "Logistic Regression" && !is.null(model)) {
+              coef_data <- as.data.frame(abs(coef(model$finalModel)[-1])) 
+              names(coef_data) <- c("Importance")
+              coef_data$Feature <- rownames(coef_data)
+              ggplot(coef_data, aes(x = reorder(Feature, Importance), y = Importance)) +
+                geom_bar(stat = "identity") +
+                coord_flip() +
+                xlab("Feature") +
+                ylab("Absolute Coefficient") +
+                ggtitle("Feature Importance for Logistic Regression (Absolute Coefficients)")
+            } else if (model_type == "k-Nearest Neighbors") {
+              plot.new()
+              text(0.5, 0.5, "Feature importance is not applicable for k-Nearest Neighbors", cex = 1.5)
+            } else if (model_type == "Gradient Boosting Machines" && !is.null(model)) {
+              varImpPlot <- varImp(model, scale = FALSE)
+              plot(varImpPlot)
+            } else if (model_type == "XGBoost" && !is.null(model)) {
+              xgbImp <- xgb.importance(feature_names = model$xNames, model = model$finalModel)
+              xgb.plot.importance(importance_matrix = xgbImp)
+            } else {
+              plot.new()
+              text(0.5, 0.5, "Feature importance not available for the selected model", cex = 1.5)
+            }
+          })
+          print('plotting done')
+        }
+      }
+  })
 
   # Dimensionality Reduction :
 
@@ -1181,7 +1224,6 @@ output$modelSummary <- renderPrint({
                                              #CumulativeVariance = cumvar[1:input$numComponents]
                                              CumulativeVariance = cumvar
                      )
-                     print(dfSummary)
                    } else if (input$dimReductionMethod == "t-SNE" && !is.null(tsneResult)) {
                      cat("t-SNE does not provide a summary of variance explained as PCA does.\n")
                      cat("t-SNE is mainly used for visualization to see the clustering of high-dimensional data.")
@@ -1209,7 +1251,6 @@ output$modelSummary <- renderPrint({
       df <- if (!is.null(processedData())) processedData() else rawData()
       targetVar <- input$imbalanceTarget
 
-      print(input$imbalanceTarget)
       req(input$imbalanceTarget)
       class_counts <- table(df[[input$imbalanceTarget]])
 
