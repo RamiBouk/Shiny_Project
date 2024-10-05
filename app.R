@@ -242,7 +242,8 @@ ui <- shinyUI(
            condition = "input.modelType == 'k-Nearest Neighbors'",
            numericInput("numNeighbors", "Number of Neighbors (k):", value = 5, min = 1)
          ),
-         checkboxInput("crossValidation", "Apply cross validation", value = FALSE),
+         checkboxInput("crossValidation", "Apply Cross Validation", value = FALSE),
+         checkboxInput("gridSearch", "Apply Grid Search", value = FALSE),
          numericInput("numFolds", "Number of folds", value = 10, min = 2),
          
          actionButton("trainModel", "Train The model")
@@ -1007,7 +1008,10 @@ output$modelSummary <- renderPrint({
           text(0.5, 0.5, "Select at least 2 features", cex = 1.5)
         })
       } else {
+        # Settings
         used_cv <- input$crossValidation
+        grid_search <-input$gridSearch
+        # remove NA 
         df_comp <- na.omit(df[c(input$mlselectedTarget, input$mlSelectedFeatures)])
       
         # Separate features and target
@@ -1019,9 +1023,9 @@ output$modelSummary <- renderPrint({
         # Split data into training and testing sets
         partitions <- createDataPartition(target, p = .8, list = TRUE)
         trainIndex <- partitions[[1]] 
-        trainData <- features[trainIndex, ]
+        trainData <- features[trainIndex,]
         trainTarget <- target[trainIndex]
-        testData <- features[-trainIndex, ]
+        testData <- features[-trainIndex,]
         testTarget <- target[-trainIndex]
 
         # Handle factor columns: Convert factors to dummy variables
@@ -1031,9 +1035,11 @@ output$modelSummary <- renderPrint({
         column_types <- sapply(features, class)
       
         # Train control configuration with or without cross-validation
+        applyCrossValidation<-input$crossValidation||input$gridSearch
+        print(applyCrossValidation)
         control <- trainControl(
-          method = if (input$crossValidation) "cv" else "none",
-          number = if (input$crossValidation) input$numFolds else 1,
+          method = if (applyCrossValidation) "cv" else "none",
+          number = if (applyCrossValidation) input$numFolds else 1,
           summaryFunction = twoClassSummary,
           classProbs = TRUE,
           savePredictions = TRUE
@@ -1044,45 +1050,93 @@ output$modelSummary <- renderPrint({
         if (input$modelType == "Logistic Regression") {
           model <- train(x = trainData, y = trainTarget, method = "glm", 
                          family = "binomial", trControl = control)
-          
-        } else if (input$modelType == "Random Forest") {
-          model <- train(x = trainData, y = trainTarget, method = "rf", 
-                         trControl = control, metric = "Accuracy", importance = TRUE)
-  
-        } else if (input$modelType == "k-Nearest Neighbors") {
-          tuneGrid <- expand.grid(k = input$numNeighbors)
-          model <- train(x = trainData, y = trainTarget, method = "knn", 
-                         trControl = control, tuneGrid = tuneGrid)
-  
-        } else if (input$modelType == "Decision Tree") {
-          model <- train(x = trainData, y = trainTarget, method = "rpart", 
-                         trControl = control)
-  
-        } else if (input$modelType == "Gradient Boosting Machines") {
-          model <- train(x = trainData, y = trainTarget, method = "gbm", 
-                         trControl = control, verbose = FALSE)
-  
-        } else if (input$modelType == "XGBoost") {
-          tuneGridXGB <- expand.grid(
-            nrounds = 100, max_depth = 3, eta = 0.3, gamma = 0,
-            colsample_bytree = 1, min_child_weight = 1, subsample = 1
-          )
-          model <- train(x = trainData, y = trainTarget, method = "xgbTree", 
-                         trControl = control, tuneGrid = tuneGridXGB, verbose = FALSE) 
         
-        # Add SVM without kernel (Linear)
-        } else if (input$modelType =="SVM (Lineare)" ) {
-          # Filter only numeric columns in trainData and testData
+        } else if (input$modelType == "Random Forest") {
+          if (grid_search) {
+            print(">##############################")
+            tuneGridRF <- expand.grid(mtry = c(2, 4, 6))  # Example: Tuning 'mtry' parameter
+            print("<##############################")
+            model <- train(x = trainData, y = trainTarget, method = "rf", 
+                           trControl = control, tuneGrid = tuneGridRF, metric = "Accuracy", importance = TRUE)
+            print("<>##############################")
+          } else {
+            model <- train(x = trainData, y = trainTarget, method = "rf", 
+                           trControl = control, metric = "Accuracy", importance = TRUE)
+          }
+        
+        } else if (input$modelType == "k-Nearest Neighbors") {
+          if (grid_search) {
+            tuneGridKNN <- expand.grid(k = seq(1, 20, by = 2))  # Example: Tuning 'k' parameter
+            model <- train(x = trainData, y = trainTarget, method = "knn", 
+                           trControl = control, tuneGrid = tuneGridKNN)
+          } else {
+            tuneGridKNN <- expand.grid(k = input$numNeighbors)  # Using default k from user input
+            model <- train(x = trainData, y = trainTarget, method = "knn", 
+                           trControl = control, tuneGrid = tuneGridKNN)
+          }
+        
+        } else if (input$modelType == "Decision Tree") {
+          if (grid_search) {
+            tuneGridDT <- expand.grid(cp = seq(0.01, 0.1, by = 0.01))  # Tuning complexity parameter 'cp'
+            model <- train(x = trainData, y = trainTarget, method = "rpart", 
+                           trControl = control, tuneGrid = tuneGridDT)
+          } else {
+            model <- train(x = trainData, y = trainTarget, method = "rpart", 
+                           trControl = control)
+          }
+        
+        } else if (input$modelType == "Gradient Boosting Machines") {
+          if (grid_search) {
+            tuneGridGBM <- expand.grid(interaction.depth = c(1, 3, 5), 
+                                       n.trees = c(50, 100, 150), 
+                                       shrinkage = c(0.01, 0.1), 
+                                       n.minobsinnode = c(10, 20))
+            model <- train(x = trainData, y = trainTarget, method = "gbm", 
+                           trControl = control, tuneGrid = tuneGridGBM, verbose = FALSE)
+          } else {
+            model <- train(x = trainData, y = trainTarget, method = "gbm", 
+                           trControl = control, verbose = FALSE)
+          }
+        
+        } else if (input$modelType == "XGBoost") {
+          if (grid_search) {
+            tuneGridXGB <- expand.grid(
+              nrounds = c(100, 200), 
+              max_depth = c(3, 6, 9), 
+              eta = c(0.01, 0.1, 0.3), 
+              gamma = c(0, 1), 
+              colsample_bytree = c(0.8, 1), 
+              min_child_weight = c(1, 3), 
+              subsample = c(0.8, 1)
+            )
+          } else {
+            tuneGridXGB <- expand.grid(
+              nrounds = 100, 
+              max_depth = 3, 
+              eta = 0.3, 
+              gamma = 0, 
+              colsample_bytree = 1, 
+              min_child_weight = 1, 
+              subsample = 1
+            )
+          }
+          model <- train(x = trainData, y = trainTarget, method = "xgbTree", 
+                         trControl = control, tuneGrid = tuneGridXGB, verbose = FALSE)
+        
+        } else if (input$modelType == "SVM (Lineare)") {
           model <- train(x = trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmLinear", 
                          trControl = control)
         
-        # Add SVM with kernel (Radial Basis Function)
         } else if (input$modelType == "SVM (RBF Kernel)") {
-          tuneGridSVM <- expand.grid(sigma = 0.1, C = 1)  # You can modify sigma and C based on user input
-          print('...training')
-          model <- train(x =trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmRadial", 
+          if (grid_search) {
+            tuneGridSVM <- expand.grid(sigma = c(0.01, 0.1, 1), C = c(0.1, 1, 10))  # Example tuning 'sigma' and 'C'
+          } else {
+            tuneGridSVM <- expand.grid(sigma = 0.1, C = 1)  # Default values if grid search is disabled
+          }
+          model <- train(x = trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmRadial", 
                          trControl = control, tuneGrid = tuneGridSVM)
         }
+
         print('training done')
         print('evaluating...')
         # Prediction and evaluation
@@ -1095,7 +1149,7 @@ output$modelSummary <- renderPrint({
           cm <- confusionMatrix(predictions, testTarget)
         
           output$modelMetrics <- renderPrint({
-            if (used_cv) {
+            if (used_cv||grid_search) {
               overall_confusion_matrix <- confusionMatrix(model$pred$pred, model$pred$obs)
               cat("Results in cross validation\n")
               print(overall_confusion_matrix)
