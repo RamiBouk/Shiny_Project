@@ -1,0 +1,190 @@
+---
+title: "Report on Data 1"
+output: html_document
+---
+
+```{r, echo=FALSE}
+#data1 <- read.csv('data/creditcard_original.csv')
+data1 <- read.csv('data/creditcard.csv')
+```
+# Analyse exploratoire des donn´ees
+## Data Summary
+
+Below is a table showing the number of missing values and the number of unique values for each column in Data 1.
+- size: `
+```{r, echo=FALSE}
+cat(dim(data1))
+```
+
+```{r, echo=FALSE}
+# Display the table using knitr::kable() and center it
+library(knitr)
+library(kableExtra)
+
+ # render the summary table
+ temp<- data1 
+ # Table logic
+ renderDT({
+  number_of_columns <- ncol(temp)
+
+  number_of_rows <- nrow(temp)
+
+  y <- do.call(rbind, lapply(names(temp), FUN=function(x) {
+    mean <- ifelse(is.numeric(temp[[x]]), round(mean(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    median <- ifelse(is.numeric(temp[[x]]), round(stats::median(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    sd <- ifelse(is.numeric(temp[[x]]), round(stats::sd(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    variance <- ifelse(is.numeric(temp[[x]]), round(stats::var(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    max <- ifelse(is.numeric(temp[[x]]), max(temp[[x]], na.rm = TRUE), NA)
+    min <- ifelse(is.numeric(temp[[x]]), min(temp[[x]], na.rm = TRUE), NA)
+    IQR <- ifelse(is.numeric(temp[[x]]), IQR(temp[[x]], na.rm =TRUE), NA)
+    levels <- length(unique(temp[[x]]))
+    c(Column=x,
+      Class=class(temp[[x]]),
+      Missing = sum(is.na(temp[[x]])),
+      Min = min,
+      Median = median,
+      Max = max,
+      Mean = mean,
+      SD = sd,
+      Variance = variance,
+      Unique_Values = as.integer(levels))
+
+  }))
+      x= list(Rows = number_of_rows, Columns = number_of_columns, Types = y)
+      DT::datatable(x$Types,
+                class = 'cell-border stripe',
+                selection=list(mode="multiple", target="row"),
+                rownames=FALSE,
+                options = list(scrollX = TRUE, autoWidth = FALSE)
+                )
+    })
+```
+## Class Distribution
+
+This section presents a bar plot showing the count of rows in the data frame `df` for each class (0 and 1).
+
+```{r, echo=FALSE, message=FALSE}
+# Load ggplot2
+library(ggplot2)
+
+# Create the plot with text labels
+ggplot(data1, aes(x = Class)) +
+  geom_bar(aes(y = ..count..), fill = "skyblue") +
+  geom_text(stat = "count", aes(label = ..count..), 
+            vjust = -0.5, size = 5) +  # Adjust vjust for label position
+  labs(title = "Frequency of Classes", x = "Class", y = "Frequency") +
+  theme_minimal()
+```
+### relation variable categorial/churn
+- there is no catgeorical vriables
+### relation categorical variable churn 
+- this are the correlations between each numerical variable and the class
+```{r, echo=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)                  # For pivot_longer
+library(ggplot2)
+library(DT)
+# Calculate correlations between numerical variables and the class
+importance <- data1 %>%
+  mutate(Class = as.numeric(as.factor(Class))) %>%
+  summarise(across(starts_with("V"), ~ abs(cor(.x, Class)))) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Correlation") %>%
+  arrange(desc(Correlation))
+
+# Display the correlation data using DT
+renderDataTable(
+  importance,
+  options = list(
+    pageLength = 15,  # Show 5 rows per page
+    autoWidth = TRUE  # Automatically adjust column widths
+  ),
+  rownames = FALSE  # Do not show row numbers
+)
+```
+#### plotting the biggest 3 
+```{r, echo=FALSE, message=FALSE}
+top_variables <- importance %>%
+  top_n(3, Correlation) %>%
+  pull(Variable)
+
+top_variables
+# Reshape data for ggplot
+df_long <- data1 %>%
+  select(all_of(top_variables), Class) %>%
+  pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
+
+# Create histograms for top correlated variables colored by class
+# Filter out non-positive values
+ggplot(df_long, aes(x = Value, fill = as.factor(Class))) +
+  geom_histogram(
+                 alpha = 0.5, 
+                 drop=T) +
+  facet_wrap(~ Variable) +
+  labs(title = "Histograms of Top 3 Correlated Variables by Class",
+       x = "Value",
+       y = "Count",
+       fill = "Class") +
+  scale_y_log10() +  # Apply logarithmic scale to the y-axis
+  theme_minimal()
+
+```
+#### plotting the least 3 
+```{r, echo=FALSE, message=FALSE}
+
+top_variables <- importance %>%
+   slice_min(order_by = Correlation, n = 3) %>%
+  pull(Variable)
+
+top_variables
+# Reshape data for ggplot
+df_long <- data1 %>%
+  select(all_of(top_variables), Class) %>%
+  pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
+
+# Create histograms for top correlated variables colored by class
+# Filter out non-positive values
+ggplot(df_long, aes(x = Value, fill = as.factor(Class))) +
+  geom_histogram(
+                 alpha = 0.5, 
+                 drop=T) +
+  facet_wrap(~ Variable) +
+  labs(title = "Histograms of Least 3 Correlated Variables by Class",
+       x = "Value",
+       y = "Count",
+       fill = "Class") +
+  scale_y_log10() +  # Apply logarithmic scale to the y-axis
+  theme_minimal()
+
+```
+### Correlation matrix
+```{r, echo=FALSE, message=FALSE}
+
+    # Select only numeric variables from the dataset
+    numeric_vars <- data1 %>% select_if(is.numeric)
+
+    # Ensure there are at least two numeric columns to compute correlation
+        # Calculate the correlation matrix
+        correlation_matrix <- cor(numeric_vars, use = "complete.obs")
+
+        # Melt the correlation matrix into long format for ggplot
+        corr_melted <- reshape2::melt(correlation_matrix)
+
+        # Create the correlation matrix heatmap
+        corr_plot <- ggplot(corr_melted, aes(Var1, Var2, fill = value)) +
+            geom_tile(color = "white") +
+            scale_fill_gradient2(low = "red", high = "blue", mid = "white",
+                                 midpoint = 0, limit = c(-1, 1), space = "Lab",
+                                 name = "Correlation") +
+            #theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                             size = 12, hjust = 1),
+                  axis.text.y = element_text(size = 12)) +
+            coord_fixed() +
+            ggtitle("Correlation Matrix") +
+            theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+    corr_plot
+```
+## Conclusion:
+- blah blah blah
+# Prediction de churn
+- we are just going to use v2, v4, v8 and v11 since the dataset is very large

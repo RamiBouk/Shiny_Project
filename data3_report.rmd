@@ -1,0 +1,291 @@
+---
+title: "Report on Data 1"
+output: html_document
+---
+
+```{r, echo=FALSE}
+#data3 <- read.csv('data/creditcard_original.csv')
+
+data3 <- read.csv('./data/whole data.csv',
+                  na.strings = c("", "NA", "?","unknown",'999'))
+```
+
+# Analyse exploratoire des donn´ees
+## Data Summary
+
+Below is a table showing the number of missing values and the number of unique values for each column in Data 1.
+- size: `
+```{r, echo=FALSE}
+cat(dim(data3))
+```
+
+```{r, echo=FALSE}
+# Display the table using knitr::kable() and center it
+library(knitr)
+library(kableExtra)
+
+ # render the summary table
+ renderDT({
+  temp<- data3 
+  number_of_columns <- ncol(temp)
+
+  number_of_rows <- nrow(temp)
+
+  y <- do.call(rbind, lapply(names(temp), FUN=function(x) {
+    mean <- ifelse(is.numeric(temp[[x]]), round(mean(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    median <- ifelse(is.numeric(temp[[x]]), round(stats::median(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    sd <- ifelse(is.numeric(temp[[x]]), round(stats::sd(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    variance <- ifelse(is.numeric(temp[[x]]), round(stats::var(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    max <- ifelse(is.numeric(temp[[x]]), max(temp[[x]], na.rm = TRUE), NA)
+    min <- ifelse(is.numeric(temp[[x]]), min(temp[[x]], na.rm = TRUE), NA)
+    IQR <- ifelse(is.numeric(temp[[x]]), IQR(temp[[x]], na.rm =TRUE), NA)
+    levels <- length(unique(temp[[x]]))
+    c(Column=x,
+      Class=class(temp[[x]]),
+      Missing = sum(is.na(temp[[x]])),
+      Unique_Values = as.integer(levels))
+
+  }))
+      x= list(Rows = number_of_rows, Columns = number_of_columns, Types = y)
+      DT::datatable(x$Types,
+                class = 'cell-border stripe',
+                selection=list(mode="multiple", target="row"),
+                rownames=FALSE,
+                options = list(scrollX = TRUE, autoWidth = FALSE)
+                )
+    }
+  )
+```
+- initial notes:
+  - 3 constant columns (Over18, employeeCount, StandardHours)
+  - 1 ID class (EmployeeID)
+  - 1 Categorical variable (Education)
+  - The rest are numeric variables
+
+```{r, echo=FALSE, message=FALSE}
+# Step 1: Remove specified columns
+data3 <- data3[, !colnames(data3) %in% c("Over18", "employeeCount", "StandardHours", "EmployeeID")]
+
+# Step 2: Convert specified categorical variable 'Education' to factor
+data3$Education <- as.factor(data3$Education)
+
+# Step 3: Identify non-numeric integer columns and convert them to factors
+non_numeric_int_cols <- sapply(data3, function(x) !is.integer(x) && !is.numeric(x))
+data3[non_numeric_int_cols] <- lapply(data3[non_numeric_int_cols], as.factor)
+```
+## Class Distribution
+
+This section presents a bar plot showing the count of rows in the data frame `df` for each class (0 and 1).
+```{r, echo=FALSE, message=FALSE}
+ggplot(data3, aes(x = Attrition)) +
+  geom_bar(aes(y = ..count..), fill = "skyblue") +
+  geom_text(stat = "count", aes(label = ..count..), 
+            vjust = -0.5, size = 5) +  # Adjust vjust for label position
+  labs(title = "Frequency of Classes", x = "Class", y = "Frequency") +
+  theme_minimal()
+```
+### relation catagorical variable/churn 
+```{r, echo=FALSE, message=FALSE}
+# Define the numeric columns that should remain numeric
+numeric_columns <- names(data3[sapply(data3, function(x) is.integer(x)||is.numeric(x))])
+```
+- finding the most important catgeorical varialbes:
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+# Set the minimum count threshold for each level
+min_count_threshold <- 5
+
+# Function to check if a variable has enough observations per level
+has_enough_levels <- function(variable, threshold) {
+  tbl <- table(variable)
+  return(all(tbl >= threshold))  # Check if all counts meet the threshold
+}
+
+# Get the names of categorical variables with enough counts
+valid_variables <- data3 %>%
+  select(-all_of(c(numeric_columns,'Attrition'))) %>%
+  summarise(across(everything(), 
+                   ~ has_enough_levels(.x, min_count_threshold))) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Has_Enough_Levels") %>%
+  filter(Has_Enough_Levels) %>%
+  pull(Variable)
+
+# Perform Chi-Square test for each valid categorical variable
+importanceCat <- data3 %>%
+  select(all_of(valid_variables)) %>%  # Select only valid variables
+  summarise(across(everything(), 
+    ~ chisq.test(table(.x, data3$Attrition))$p.value)) %>%  # Replace 'y' with your binary target
+  pivot_longer(cols = everything(), 
+    names_to = "Variable", values_to = "P_Value") %>%
+  arrange(P_Value)  # Sort by p-value
+
+# Render the DataTable
+renderDataTable(
+  importanceCat,
+  options = list(
+    pageLength = 15,  # Show 15 rows per page
+    autoWidth = TRUE  # Automatically adjust column widths
+  ),
+  rownames = FALSE  # Do not show row numbers
+)
+```
+
+#### Plotting the top 3 
+```{r, echo=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Assuming you've already calculated 'importanceCat' with p-values from Chi-Square tests
+
+# Get the top 3 variables based on their p-values
+top3_variables <- importanceCat %>%
+  top_n(-3, P_Value) %>%  # Select the top 3 variables with the smallest p-values
+  pull(Variable)
+
+# Loop through each of the top 3 variables and create a bar plot
+for (var in top3_variables) {
+  plot_data <- data3 %>%
+    group_by(!!sym(var), Attrition) %>%
+    summarise(count = n()) %>%
+    ungroup()
+  
+  # Create a bar plot for the variable
+  p <- ggplot(plot_data, aes(x = !!sym(var), y = count, fill = factor(Attrition))) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = paste("Distribution of", var, "by Churn Status"),
+         x = var,
+         y = "Count",
+         fill = "Churn Status") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)  # Ensure each plot is printed during the loop
+}
+```
+#### Plotting the top 3 rates 
+```{r, echo=FALSE, message=FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Assuming you've already calculated 'importanceCat' with p-values from Chi-Square tests
+
+# Get the top 3 variables based on their p-values
+top3_variables <- importanceCat %>%
+  top_n(-3, P_Value) %>%  # Select the top 3 variables with the smallest p-values
+  pull(Variable)
+
+# Loop through each of the top 3 variables and create a churn rate plot
+for (var in top3_variables) {
+  plot_data <- data3 %>%
+    group_by(!!sym(var), Attrition) %>%
+    summarise(count = n()) %>%
+    group_by(!!sym(var)) %>%
+    mutate(churn_rate = count / sum(count)) %>%  # Calculate churn rate
+    filter(Attrition=="Yes") %>%  # Keep only the churn rate (where y == 1)
+    ungroup()
+  
+  # Create a bar plot showing churn rate
+  p <- ggplot(plot_data, aes(x = !!sym(var), y = churn_rate, fill = factor(Attrition))) +
+    geom_bar(stat = "identity", position = "dodge", fill = "steelblue") +
+    labs(title = paste("Churn Rate by", var),
+         x = var,
+         y = "Churn Rate",
+         fill = "Churn Status") +
+    scale_y_continuous(labels = scales::percent_format()) +  # Show y-axis as percentage
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)  # Ensure each plot is printed during the loop
+}
+```
+
+### relation numerical variable/churn 
+- this are the correlations between each numerical variable and the class
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+library(dplyr)
+library(tidyr)                  # For pivot_longer
+library(ggplot2)
+library(DT)
+# Calculate correlations between numerical variables and the class
+importance <- data3 %>%
+  # Ensure 'y' is numeric (assuming 'y' is a column in data3)
+  mutate(Attrition = as.numeric(as.factor(Attrition))) %>%
+  # Apply cor() only to numeric columns, calculating correlation with 'y'
+  summarise(across(where(is.numeric), ~ abs(cor(.x, Attrition, use = "complete.obs")))) %>%
+  # Pivot to long format for better readability and sorting
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Correlation") %>%
+  # Remove the correlation of 'y' with itself
+  filter(Variable != "Attrition") %>%
+  # Sort the variables by correlation in descending order
+  arrange(desc(Correlation))
+
+# Display the correlation data using DT
+renderDataTable(
+  importance,
+  options = list(
+    pageLength = 15,  # Show 5 rows per page
+    autoWidth = TRUE  # Automatically adjust column widths
+  ),
+  rownames = FALSE  # Do not show row numbers
+)
+```
+#### plotting the biggest 3 count
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+top_variables <- importance %>%
+   top_n(Correlation, n = 3) %>%
+  pull(Variable)
+
+# Reshape data for ggplot
+df_long <- data3 %>%
+  select(all_of(top_variables), Attrition) %>%
+  pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
+
+# Create separate plots for each variable
+for (variable in top_variables) {
+  plot<-ggplot(df_long %>% filter(Variable == variable), aes(x = Value, fill = as.factor(Attrition))) +
+    geom_histogram(alpha = 0.5, drop = TRUE) +
+    labs(title = paste("Histogram of", variable, "by Class"),
+         x = "Value",
+         y = "Count",
+         fill = "Class") +
+    #scale_y_log10() +  # Apply logarithmic scale to the y-axis
+    theme_minimal() 
+
+    print(plot)
+    }
+
+```
+#### Correlation matrix
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+
+    # Select only numeric variables from the dataset
+    numeric_vars <- data3 %>% select_if(is.numeric)
+
+    # Ensure there are at least two numeric columns to compute correlation
+        # Calculate the correlation matrix
+        correlation_matrix <- cor(numeric_vars, use = "complete.obs")
+
+        # Melt the correlation matrix into long format for ggplot
+        corr_melted <- reshape2::melt(correlation_matrix)
+
+        # Create the correlation matrix heatmap
+        corr_plot <- ggplot(corr_melted, aes(Var1, Var2, fill = value)) +
+            geom_tile(color = "white") +
+            scale_fill_gradient2(low = "red", high = "blue", mid = "white",
+                                 midpoint = 0, limit = c(-1, 1), space = "Lab",
+                                 name = "Correlation") +
+            #theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                             size = 12, hjust = 1),
+                  axis.text.y = element_text(size = 12)) +
+            coord_fixed() +
+            ggtitle("Correlation Matrix") +
+            theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+    corr_plot
+```
+## Conclusion:
+- blah blah blah
+# Prediction de churn
+- we are just going to use v2, v4, v8 and v11 since the dataset is very large

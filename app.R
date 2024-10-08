@@ -13,7 +13,7 @@ packages_to_install <- c("shiny","shinyjs", "ggplot2","editData",
                          "shinythemes", "ggcorrplot", "e1071", "caret", 
                          "randomForest", "rlang", "pROC", "Rtsne", 
                          "xgboost", "gbm","virdis","ROSE","caret","bslib",
-                         "plotly"
+                         "plotly","rmarkdown","knitr",'kableXxtra'
                         )
 
 # Installation des packages s'ils ne sont pas déjà installés
@@ -48,6 +48,7 @@ library(ROSE)
 library(caret)
 library(bslib)
 library(plotly)
+library(knitr)
 
 
 
@@ -55,7 +56,7 @@ library(plotly)
 NO_DATA="No Data Loaded"
 
 
-
+set.seed(123)
 # Définition de l'interface utilisateur
 NoDataMessage <- conditionalPanel(
                  condition = "! output.dataLoaded",
@@ -80,6 +81,17 @@ ui <- shinyUI(
          document.documentElement.style.setProperty('--dt-row-selected-text', '#333');"
       ))  
     )
+  ),
+  tabPanel("Report",id ="tab3",
+         tabsetPanel(
+           tabPanel("data1",
+                    htmlOutput("report1")),  # Ajout d'un plot pour la courbe ROC
+           tabPanel("data2",
+                    htmlOutput("report2")),
+
+           tabPanel("data3",
+                    htmlOutput('report3')),
+         )
   ),
   tabPanel("Data Loading & Overview",
            sidebarLayout(
@@ -270,6 +282,18 @@ ui <- shinyUI(
 
 # Fonction serveur
 server <- function(input, output, session) {
+
+  # Function to render the R Markdown files
+  output$report1 <- renderUI({
+    HTML(markdown::markdownToHTML(knit('data1_report.rmd'),fragment.only=T))
+  })
+  output$report2 <- renderUI({
+    HTML(markdown::markdownToHTML(knit('data2_report.rmd'),fragment.only=T))
+  })
+  output$report3 <- renderUI({
+    HTML(markdown::markdownToHTML(knit('data3_report.rmd'),fragment.only=T))
+  })
+
   # Initialisation des valeurs réactives
   rawData <- reactiveVal()
   processedData <- reactiveVal(NULL)
@@ -888,10 +912,22 @@ output$correlationPlot <- renderUI({
       if (startsWith(input$modelType, "SVM")) {
           # Filter numeric columns only
           availableFeatures <- names(df)[sapply(df, is.numeric)]
+          
+          # Remove constant columns from availableFeatures
+          constant_columns <- names(df)[sapply(df, function(x) length(unique(x)) <= 1)]
+          availableFeatures <- setdiff(availableFeatures, constant_columns)
       } else {
           # Use all column names if not SVM
           availableFeatures <- names(df)
+          
+          # Remove constant columns from availableFeatures
+          constant_columns <- names(df)[sapply(df, function(x) length(unique(x)) <= 1)]
+          availableFeatures <- setdiff(availableFeatures, constant_columns)
       }
+      print('#######################################################3333')
+      print(constant_columns)
+      print(availableFeatures)
+
   
       # UI for selecting features with a "Select All" button
       card(
@@ -901,7 +937,8 @@ output$correlationPlot <- renderUI({
                   height = 300,
                   card_body(
                       checkboxGroupInput("mlSelectedFeatures", NULL, 
-                                         choices = availableFeatures[availableFeatures != input$mlselectedTarget])
+                                         choices = 
+                                           availableFeatures[availableFeatures != input$mlselectedTarget])
                   )
               ),
               # Adding a "Select All" button
@@ -953,6 +990,21 @@ output$correlationPlot <- renderUI({
   })
   observeEvent(input$mlselectedTarget,{
     df <- if (!is.null(processedData())) processedData() else rawData()
+      if (startsWith(input$modelType, "SVM")) {
+          # Filter numeric columns only
+          availableFeatures <- names(df)[sapply(df, is.numeric)]
+          
+          # Remove constant columns from availableFeatures
+          constant_columns <- names(df)[sapply(df, function(x) length(unique(x)) <= 1)]
+          availableFeatures <- setdiff(availableFeatures, constant_columns)
+      } else {
+          # Use all column names if not SVM
+          availableFeatures <- names(df)
+          
+          # Remove constant columns from availableFeatures
+          constant_columns <- names(df)[sapply(df, function(x) length(unique(x)) <= 1)]
+          availableFeatures <- setdiff(availableFeatures, constant_columns)
+      }
     req(df)
                 models=c( "Decision Tree","Random Forest", 
                               "k-Nearest Neighbors",  
@@ -967,7 +1019,8 @@ output$correlationPlot <- renderUI({
                 else{
                   updateSelectInput(session,"modelType",choices=models)
                 }
-                updateCheckboxGroupInput(session,"mlSelectedFeatures",NULL,names(df)[names(df)!=input$mlselectedTarget])
+                updateCheckboxGroupInput(session,"mlSelectedFeatures",NULL,
+                                         availableFeatures[availableFeatures != input$mlselectedTarget])
 
   })
 #  observeEvent(input$modelType,{
@@ -1013,7 +1066,7 @@ output$modelSummary <- renderPrint({
         grid_search <-input$gridSearch
         # remove NA 
         df_comp <- na.omit(df[c(input$mlselectedTarget, input$mlSelectedFeatures)])
-      
+
         # Separate features and target
         targetName <- input$mlselectedTarget
         target <- as.factor(df_comp[[targetName]])
@@ -1021,6 +1074,7 @@ output$modelSummary <- renderPrint({
         features <- df_comp[, input$mlSelectedFeatures]
       
         # Split data into training and testing sets
+        set.seed(123)  # Set the seed again for reproducibility
         partitions <- createDataPartition(target, p = .8, list = TRUE)
         trainIndex <- partitions[[1]] 
         trainData <- features[trainIndex,]
@@ -1042,14 +1096,52 @@ output$modelSummary <- renderPrint({
           number = if (applyCrossValidation) input$numFolds else 1,
           summaryFunction = twoClassSummary,
           classProbs = TRUE,
-          savePredictions = TRUE
+          savePredictions = TRUE,
+          verboseIter = TRUE      # Show training progress
         )
       
         # Train model
         model <- NULL
+          set.seed(123)  # Set the seed again for reproducibility
+        print('training')
+          output$rocPlot <- renderPlot({
+              plot.new()
+              text(0.5, 0.5, "Training...", cex = 1.5)
+          })
         if (input$modelType == "Logistic Regression") {
-          model <- train(x = trainData, y = trainTarget, method = "glm", 
-                         family = "binomial", trControl = control)
+
+
+          if(grid_search){
+              control <- trainControl(method = "cv",
+               verboseIter = TRUE,
+               number = 10,
+              )
+              
+              # Define a grid of parameters
+              # For example, if using glmnet, you can tune alpha and lambda
+              tuneGrid <- expand.grid(alpha = seq(0, 1, by = 0.1), 
+                                      lambda = c(0,0.0001,0.001))
+              
+              # Train the model with grid search
+              model <- train(x = trainData, 
+                             y = trainTarget, 
+                             method = "glmnet",  # Change method if using glm
+                             family = "binomial", 
+                             trControl = control,
+                             tuneGrid = tuneGrid)
+              
+              # Check the best tuning parameters
+              print(model$bestTune)
+          }else{
+              control <- trainControl(method = "cv",
+               verboseIter = TRUE,
+               number = 10,
+              )
+          model <- train(x = trainData, 
+                         y = trainTarget, 
+                         method = "glmnet", 
+                         family = "binomial")
+          }
         
         } else if (input$modelType == "Random Forest") {
           if (grid_search) {
@@ -1076,13 +1168,32 @@ output$modelSummary <- renderPrint({
           }
         
         } else if (input$modelType == "Decision Tree") {
+        control <- trainControl(
+          method =  "cv" ,
+          number = 5,
+          summaryFunction = defaultSummary,
+          classProbs = TRUE,
+          savePredictions = TRUE,
+          verboseIter = TRUE      # Show training progress
+        )
           if (grid_search) {
-            tuneGridDT <- expand.grid(cp = seq(0.01, 0.1, by = 0.01))  # Tuning complexity parameter 'cp'
-            model <- train(x = trainData, y = trainTarget, method = "rpart", 
-                           trControl = control, tuneGrid = tuneGridDT)
+            tuneGridDT <- expand.grid(cp = c(0.01,0.04,0.08))  # Tuning complexity parameter 'cp'
+            print(tuneGridDT)
+            model <- train(x = trainData, 
+                           y = trainTarget, 
+                           method = "rpart", 
+                           trControl = control, 
+                           tuneGrid = tuneGridDT)
           } else {
-            model <- train(x = trainData, y = trainTarget, method = "rpart", 
-                           trControl = control)
+            # Assuming trainTarget is your target variable
+            target_counts <- table(trainTarget)
+            
+            # Print the counts of each value in trainTarget
+            print(target_counts)
+            model <- train(x = trainData, 
+                           y = trainTarget, 
+                           method = "rpart",
+                          trControl=control)
           }
         
         } else if (input$modelType == "Gradient Boosting Machines") {
@@ -1124,17 +1235,67 @@ output$modelSummary <- renderPrint({
                          trControl = control, tuneGrid = tuneGridXGB, verbose = FALSE)
         
         } else if (input$modelType == "SVM (Lineare)") {
-          model <- train(x = trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmLinear", 
+          print(length(trainTarget))
+          total_samples <- length(trainTarget)
+          print(total_samples)
+          trainSample=trainData
+          trainTargetSample=trainTarget
+          if(total_samples>20000){
+          samplePartitions <- createDataPartition(trainTarget,
+                                                  p = 20000/total_samples, list = TRUE)
+          sampleIndex <- samplePartitions[[1]] 
+          trainSample <- trainData[sampleIndex,]
+          trainTargetSample <- trainTarget[sampleIndex]
+          print('wtf is shappening here') 
+          print(length(trainTargetSample))
+          }        
+
+          if (grid_search){
+            print('grid searciing SVM')
+            grid <- expand.grid(C = c(0.01, 0.1, 1, 10, 100))
+            model <- train(x = trainSample,
+                           y = trainTargetSample,
+                           method = "svmLinear", 
+                           trControl = control,
+                           tuneGrid=grid)
+
+          }else{
+          print('using thye default c=1 in SVM')
+          model <- train(x = trainSample,
+                         y = trainTargetSample,
+                         method = "svmLinear", 
                          trControl = control)
-        
+          }
         } else if (input$modelType == "SVM (RBF Kernel)") {
+          print('rbf>>>>>>>>>>>>>>>>')
+          trainSample=trainData
+          trainTargetSample=trainTarget
+          total_samples <- length(trainTarget)
+          print(total_samples)
+          print(400/total_samples)
+          print(total_samples)
+          if(total_samples>10000){
+            samplePartitions <- createDataPartition(trainTarget,
+                                                  p = 10000/total_samples,
+                                                  list = TRUE)
+          sampleIndex <- samplePartitions[[1]] 
+          trainSample <- trainData[sampleIndex,]
+          trainTargetSample <- trainTarget[sampleIndex]}
+          print('wtf')
+          print(dim(trainTargetSample))
+          print(dim(trainSample))
+          #print(trainSample)
           if (grid_search) {
-            tuneGridSVM <- expand.grid(sigma = c(0.01, 0.1, 1), C = c(0.1, 1, 10))  # Example tuning 'sigma' and 'C'
+            tuneGridSVM <- expand.grid(sigma = c(0.05, 0.1, 0.15), C = c(0.1, 8, 10,13))  # Example tuning 'sigma' and 'C'
           } else {
             tuneGridSVM <- expand.grid(sigma = 0.1, C = 1)  # Default values if grid search is disabled
           }
-          model <- train(x = trainData %>% select(where(is.numeric)), y = trainTarget, method = "svmRadial", 
-                         trControl = control, tuneGrid = tuneGridSVM)
+          model <- train(x = trainSample, 
+                         y = trainTargetSample,
+                         method = "svmRadial", 
+                         trControl = control, 
+                         tuneGrid = tuneGridSVM,
+          maxit=10000000000000000000000000000)
         }
 
         print('training done')
@@ -1147,7 +1308,6 @@ output$modelSummary <- renderPrint({
             predictions <- predict(model, newdata = testData )}
           print('________________________________prediction')
           cm <- confusionMatrix(predictions, testTarget)
-        
           output$modelMetrics <- renderPrint({
             if (used_cv||grid_search) {
               overall_confusion_matrix <- confusionMatrix(model$pred$pred, model$pred$obs)
@@ -1164,7 +1324,9 @@ output$modelSummary <- renderPrint({
           output$rocPlot <- renderPlot({
             probPred <- predict(model, newdata = testData, type = "prob")
             rocCurve <- roc(response = testTarget, predictor = probPred[,2])
-            if (model_type != "Decision Tree" ||model_type !="SVM (Lineare)"  || model_type !="SVM (RBF Kernel)") {
+            if (T) {
+              print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+              print(model_type)
               plot(rocCurve, main = "ROC Curve")
               aucValue <- auc(rocCurve)
               legend("bottomright", legend = paste("AUC:", format(aucValue, digits = 4)))
