@@ -1,0 +1,366 @@
+---
+title: "Report on Data 1"
+output: html_document
+---
+
+```{r, echo=FALSE}
+#data3 <- read.csv('data/creditcard_original.csv')
+
+data3 <- read.csv('./data/whole data.csv',
+                  na.strings = c("", "NA", "?","unknown",'999'))
+```
+
+# Analyse détaillée du jeu de données "whole data"
+
+#### 1. Dimensions du jeu de données, valeurs manquantes et attributs constants
+- **Dimensions** : Le jeu de données contient 4 410 lignes et 29 colonnes.
+- **Valeurs manquantes** : Certaines colonnes contiennent des valeurs manquantes :
+  - `EnvironmentSatisfaction` : 25 valeurs manquantes
+  - `JobSatisfaction` : 20 valeurs manquantes
+  - `WorkLifeBalance` : 38 valeurs manquantes
+  - `NumCompaniesWorked` : 19 valeurs manquantes
+  - `TotalWorkingYears` : 9 valeurs manquantes
+
+  Ces valeurs manquantes devront être traitées pour éviter des problèmes dans les analyses ou les modèles prédictifs.
+  
+- **Attributs constants** : Les colonnes `EmployeeCount`, `Over18`, et `StandardHours` sont constantes, ce qui signifie qu'elles n'apportent aucune information utile et peuvent être exclues des analyses.
+
+- 1 colonne identifiant (`EmployeeID`)
+- 1 variable catégorielle (`Education`)
+- Les autres colonnes sont des variables numériques
+
+```{r, echo=FALSE}
+cat(dim(data3))
+```
+
+```{r, echo=FALSE}
+# Display the table using knitr::kable() and center it
+library(knitr)
+library(kableExtra)
+
+ # render the summary table
+ renderDT({
+  temp<- data3 
+  number_of_columns <- ncol(temp)
+
+  number_of_rows <- nrow(temp)
+
+  y <- do.call(rbind, lapply(names(temp), FUN=function(x) {
+    mean <- ifelse(is.numeric(temp[[x]]), round(mean(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    median <- ifelse(is.numeric(temp[[x]]), round(stats::median(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    sd <- ifelse(is.numeric(temp[[x]]), round(stats::sd(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    variance <- ifelse(is.numeric(temp[[x]]), round(stats::var(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    max <- ifelse(is.numeric(temp[[x]]), max(temp[[x]], na.rm = TRUE), NA)
+    min <- ifelse(is.numeric(temp[[x]]), min(temp[[x]], na.rm = TRUE), NA)
+    IQR <- ifelse(is.numeric(temp[[x]]), IQR(temp[[x]], na.rm =TRUE), NA)
+    levels <- length(unique(temp[[x]]))
+    c(Column=x,
+      Class=class(temp[[x]]),
+      Missing = sum(is.na(temp[[x]])),
+      Unique_Values = as.integer(levels))
+
+  }))
+      x= list(Rows = number_of_rows, Columns = number_of_columns, Types = y)
+      DT::datatable(x$Types,
+                class = 'cell-border stripe',
+                selection=list(mode="multiple", target="row"),
+                rownames=FALSE,
+                options = list(scrollX = TRUE, autoWidth = FALSE)
+                )
+    }
+  )
+```
+
+```{r, echo=FALSE, message=FALSE}
+# Step 1: Remove specified columns
+data3 <- data3[, !colnames(data3) %in% c("Over18", "employeeCount", "StandardHours", "EmployeeID")]
+
+# Step 2: Convert specified categorical variable 'Education' to factor
+data3$Education <- as.factor(data3$Education)
+
+# Step 3: Identify non-numeric integer columns and convert them to factors
+non_numeric_int_cols <- sapply(data3, function(x) !is.integer(x) && !is.numeric(x))
+data3[non_numeric_int_cols] <- lapply(data3[non_numeric_int_cols], as.factor)
+```
+
+#### 2. Proportion des individus ayant quitté l'entreprise (Attrition)
+Le graphique en bars indique une proportion déséquilibrée entre les réponses :
+- **No** : La majorité des individus, environ 84.4 %, sont restés dans l'entreprise.
+- **Yes** : Environ 15.6 % des individus ont quitté l'entreprise.
+
+Ce déséquilibre de classe suggère qu'il faudra peut-être utiliser des techniques pour gérer les données déséquilibrées, telles que le sur-échantillonnage des cas d'attrition ou le sous-échantillonnage des cas de non-attrition, pour améliorer la performance des modèles prédictifs.
+
+```{r, echo=FALSE, message=FALSE}
+ggplot(data3, aes(x = Attrition)) +
+  geom_bar(aes(y = ..count..), fill = "skyblue") +
+  geom_text(stat = "count", aes(label = ..count..), 
+            vjust = -0.5, size = 5) +  # Adjust vjust for label position
+  labs(title = "Frequency of Classes", x = "Class", y = "Frequency") +
+  theme_minimal()
+```
+
+## 3. Analyse des variables catégorielles
+
+```{r, echo=FALSE, message=FALSE}
+# Define the numeric columns that should remain numeric
+numeric_columns <- names(data3[sapply(data3, function(x) is.integer(x)||is.numeric(x))])
+```
+
+- Considérons uniquement les variables les **plus importantes**: 
+
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+# Set the minimum count threshold for each level
+min_count_threshold <- 5
+
+# Function to check if a variable has enough observations per level
+has_enough_levels <- function(variable, threshold) {
+  tbl <- table(variable)
+  return(all(tbl >= threshold))  # Check if all counts meet the threshold
+}
+
+# Get the names of categorical variables with enough counts
+valid_variables <- data3 %>%
+  select(-all_of(c(numeric_columns,'Attrition'))) %>%
+  summarise(across(everything(), 
+                   ~ has_enough_levels(.x, min_count_threshold))) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Has_Enough_Levels") %>%
+  filter(Has_Enough_Levels) %>%
+  pull(Variable)
+
+# Perform Chi-Square test for each valid categorical variable
+importanceCat <- data3 %>%
+  select(all_of(valid_variables)) %>%  # Select only valid variables
+  summarise(across(everything(), 
+    ~ chisq.test(table(.x, data3$Attrition))$p.value)) %>%  # Replace 'y' with your binary target
+  pivot_longer(cols = everything(), 
+    names_to = "Variable", values_to = "P_Value") %>%
+  arrange(P_Value)  # Sort by p-value
+
+# Render the DataTable
+renderDataTable(
+  importanceCat,
+  options = list(
+    pageLength = 15,  # Show 15 rows per page
+    autoWidth = TRUE  # Automatically adjust column widths
+  ),
+  rownames = FALSE  # Do not show row numbers
+)
+```
+#### Top 3 
+```{r, echo=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Assuming you've already calculated 'importanceCat' with p-values from Chi-Square tests
+
+# Get the top 3 variables based on their p-values
+top3_variables <- importanceCat %>%
+  top_n(-3, P_Value) %>%  # Select the top 3 variables with the smallest p-values
+  pull(Variable)
+
+# Loop through each of the top 3 variables and create a bar plot
+for (var in top3_variables) {
+  plot_data <- data3 %>%
+    group_by(!!sym(var), Attrition) %>%
+    summarise(count = n()) %>%
+    ungroup()
+  
+  # Create a bar plot for the variable
+  p <- ggplot(plot_data, aes(x = !!sym(var), y = count, fill = factor(Attrition))) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = paste("Distribution of", var, "by Churn Status"),
+         x = var,
+         y = "Count",
+         fill = "Churn Status") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)  # Ensure each plot is printed during the loop
+}
+```
+#### Top 3 rates 
+```{r, echo=FALSE, message=FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Assuming you've already calculated 'importanceCat' with p-values from Chi-Square tests
+
+# Get the top 3 variables based on their p-values
+top3_variables <- importanceCat %>%
+  top_n(-3, P_Value) %>%  # Select the top 3 variables with the smallest p-values
+  pull(Variable)
+
+# Loop through each of the top 3 variables and create a churn rate plot
+for (var in top3_variables) {
+  plot_data <- data3 %>%
+    group_by(!!sym(var), Attrition) %>%
+    summarise(count = n()) %>%
+    group_by(!!sym(var)) %>%
+    mutate(churn_rate = count / sum(count)) %>%  # Calculate churn rate
+    filter(Attrition=="Yes") %>%  # Keep only the churn rate (where y == 1)
+    ungroup()
+  
+  # Create a bar plot showing churn rate
+  p <- ggplot(plot_data, aes(x = !!sym(var), y = churn_rate, fill = factor(Attrition))) +
+    geom_bar(stat = "identity", position = "dodge", fill = "steelblue") +
+    labs(title = paste("Churn Rate by", var),
+         x = var,
+         y = "Churn Rate",
+         fill = "Churn Status") +
+    scale_y_continuous(labels = scales::percent_format()) +  # Show y-axis as percentage
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)  # Ensure each plot is printed during the loop
+}
+```
+
+#### 4. Analyse des variables numériques
+- this are the correlations between each numerical variable and the class
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+library(dplyr)
+library(tidyr)                  # For pivot_longer
+library(ggplot2)
+library(DT)
+# Calculate correlations between numerical variables and the class
+importance <- data3 %>%
+  # Ensure 'y' is numeric (assuming 'y' is a column in data3)
+  mutate(Attrition = as.numeric(as.factor(Attrition))) %>%
+  # Apply cor() only to numeric columns, calculating correlation with 'y'
+  summarise(across(where(is.numeric), ~ abs(cor(.x, Attrition, use = "complete.obs")))) %>%
+  # Pivot to long format for better readability and sorting
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Correlation") %>%
+  # Remove the correlation of 'y' with itself
+  filter(Variable != "Attrition") %>%
+  # Sort the variables by correlation in descending order
+  arrange(desc(Correlation))
+
+# Display the correlation data using DT
+renderDataTable(
+  importance,
+  options = list(
+    pageLength = 15,  # Show 5 rows per page
+    autoWidth = TRUE  # Automatically adjust column widths
+  ),
+  rownames = FALSE  # Do not show row numbers
+)
+```
+#### Top 3 count
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+top_variables <- importance %>%
+   top_n(Correlation, n = 3) %>%
+  pull(Variable)
+
+# Reshape data for ggplot
+df_long <- data3 %>%
+  select(all_of(top_variables), Attrition) %>%
+  pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
+
+# Create separate plots for each variable
+for (variable in top_variables) {
+  plot<-ggplot(df_long %>% filter(Variable == variable), aes(x = Value, fill = as.factor(Attrition))) +
+    geom_histogram(alpha = 0.5, drop = TRUE) +
+    labs(title = paste("Histogram of", variable, "by Class"),
+         x = "Value",
+         y = "Count",
+         fill = "Class") +
+    #scale_y_log10() +  # Apply logarithmic scale to the y-axis
+    theme_minimal() 
+
+    print(plot)
+    }
+
+```
+
+#### 5. Matrice de corrélation des attributs
+L'analyse de la matrice de corrélation met en évidence les points suivants :
+- **Corrélations importantes** : Certaines variables montrent des corrélations significatives entre elles, comme **TotalWorkingYears**, **YearsAtCompany**, et **MonthlyIncome**, qui pourraient jouer un rôle clé dans l'attrition.
+- **Relations complexes** : D'autres variables montrent des corrélations modérées ou faibles, suggérant que leur impact pourrait être plus complexe et dépendre d'interactions avec d'autres variables.
+
+Ces relations doivent être considérées lors de la construction de modèles pour garantir que toutes les interactions pertinentes soient prises en compte.
+
+
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+
+    # Select only numeric variables from the dataset
+    numeric_vars <- data3 %>% select_if(is.numeric)
+
+    # Ensure there are at least two numeric columns to compute correlation
+        # Calculate the correlation matrix
+        correlation_matrix <- cor(numeric_vars, use = "complete.obs")
+
+        # Melt the correlation matrix into long format for ggplot
+        corr_melted <- reshape2::melt(correlation_matrix)
+
+        # Create the correlation matrix heatmap
+        corr_plot <- ggplot(corr_melted, aes(Var1, Var2, fill = value)) +
+            geom_tile(color = "white") +
+            scale_fill_gradient2(low = "red", high = "blue", mid = "white",
+                                 midpoint = 0, limit = c(-1, 1), space = "Lab",
+                                 name = "Correlation") +
+            #theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                             size = 12, hjust = 1),
+                  axis.text.y = element_text(size = 12)) +
+            coord_fixed() +
+            ggtitle("Correlation Matrix") +
+            theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+    corr_plot
+```
+
+#### B- Conclusions globales
+- **Variables influentes** : Les variables comme **Age**, **MonthlyIncome**, **YearsAtCompany**, et certaines variables catégorielles comme **BusinessTravel**, **JobRole**, et **MaritalStatus** semblent jouer un rôle clé dans la prédiction de l'attrition. Elles devraient être priorisées dans l'élaboration d'un modèle de prédiction.
+- **Déséquilibre de classe** : Le déséquilibre de la classe cible (majorité de non-attrition) devra être traité avec des techniques adaptées pour éviter les biais dans le modèle prédictif.
+- **Stratégies d'amélioration** : Il sera essentiel d'appliquer des techniques d'ingénierie des caractéristiques, de sélection des variables, et de gestion des valeurs manquantes pour obtenir des résultats optimaux lors de la construction du modèle.
+
+Ces conclusions fournissent une base solide pour aborder la modélisation prédictive de ce jeu de données en utilisant les variables et stratégies identifiées.
+
+
+# Prediction de Churn
+
+### Métriques
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+library(knitr)
+library(kableExtra)
+
+# Create the data frame for the new performance metrics
+new_data <- data.frame(
+  `Data Approach` = c(rep("No Balancing", 4), rep("Undersampling", 4), rep("Oversampling", 4)),
+  Model = c("DT", "LG", "SVM", "SVM_RBF", "DT", "LG", "SVM", "SVM_RBF", "DT", "LG", "SVM", "SVM_RBF"),
+  `ROC Default` = c(0.60, 0.74, 0.57, 0.95, 0.63, 0.74, 0.74, 0.89, 0.64, 0.68, 0.68, 0.80),
+  `ROC Grid` = c(0.66, 0.74, 0.61, 0.99, 0.75, 0.74, 0.74, 0.96, 0.65, 0.67, 0.68, 0.82)
+)
+
+# Create the table using kable and kableExtra
+kable(new_data, caption = "Prediction Results: Performance Metrics for Different Data Balancing Techniques", booktabs = TRUE) %>%
+  kable_styling(full_width = TRUE, position = "center", font_size = 14) %>% # Set full width and increase font size
+  row_spec(0, bold = TRUE, color = "white", background = "#4CAF50") %>% # Header row styling
+  column_spec(1, bold = TRUE) %>% # Bold the first column (Data Approach)
+  collapse_rows(columns = 1, valign = "middle") %>% # Merge rows for Data Approach column
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+### Observations
+
+- **No Balancing:** 
+  - The **SVM_RBF** model exhibits the best performance with a **ROC Grid** score of 0.99, significantly higher than the other models. This high score might indicate potential **overfitting**, as the model may be too closely aligned to the training data.
+  - **DT** and **SVM** models have relatively lower performance compared to **LG** and **SVM_RBF**, suggesting they might not handle imbalanced data as well.
+
+- **Undersampling:**
+  - The **SVM_RBF** model continues to perform strongly with a **ROC Grid** score of 0.96, demonstrating stability even with reduced data.
+  - **LG** and **SVM** models show consistent performance, indicating that they handle undersampling reasonably well.
+
+- **Oversampling:**
+  - **SVM_RBF** once again outperforms other models with a **ROC Grid** score of 0.82, highlighting its ability to leverage larger datasets effectively.
+  - The **LG** and **DT** models experience slight drops in performance with oversampling, which may indicate sensitivity to data balancing techniques.
+
+### General Observations
+
+- **Best Performing Model:** The **SVM_RBF** model consistently shows superior performance across all data balancing techniques, especially with **Oversampling** and **Undersampling** approaches.
+- **Effect of Data Balancing:** Undersampling generally improves the performance of decision tree models, while oversampling slightly enhances the scores for SVM and SVM_RBF.
+- **Model Stability:** Linear models like **LG** maintain stable performance across different balancing techniques, although they do not reach the high levels achieved by non-linear models like SVM_RBF.
+
+These observations suggest that **SVM_RBF** with an oversampling on the unbalanced dataset, is the most robust model for predictive analysis. Data balancing techniques can be crucial in optimizing the model's performance.

@@ -1,0 +1,252 @@
+---
+title: "Report on Data 1"
+output: html_document
+---
+
+```{r, echo=FALSE}
+data1 <- read.csv('data/creditcard_original.csv')
+# data1 <- read.csv('data/creditcard.csv')
+print(data1)
+```
+# Analyse détaillée du jeu de données
+### A-
+#### 1. Dimensions du jeu de données, valeurs manquantes et attributs constants
+- **Dimensions** : Le jeu de données contient 284 807 lignes et 31 colonnes, ce qui indique une taille importante de l'échantillon.
+- **Valeurs manquantes** : Aucune valeur manquante n'a été détectée, ce qui signifie que l'ensemble des données est complet et qu'il n'y a pas besoin d'opérations de nettoyage concernant les valeurs manquantes.
+- **Attributs constants** : Il n'y a pas d'attributs constants, ce qui est un bon signe car des attributs constants n'apporteraient aucune valeur analytique au modèle prédictif.
+```{r, echo=FALSE}
+cat(dim(data1))
+```
+
+```{r, echo=FALSE}
+# Display the table using knitr::kable() and center it
+library(knitr)
+library(kableExtra)
+
+ # render the summary table
+ temp<- data1 
+ # Table logic
+ renderDT({
+  number_of_columns <- ncol(temp)
+
+  number_of_rows <- nrow(temp)
+
+  y <- do.call(rbind, lapply(names(temp), FUN=function(x) {
+    mean <- ifelse(is.numeric(temp[[x]]), round(mean(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    median <- ifelse(is.numeric(temp[[x]]), round(stats::median(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    sd <- ifelse(is.numeric(temp[[x]]), round(stats::sd(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    variance <- ifelse(is.numeric(temp[[x]]), round(stats::var(temp[[x]], na.rm = TRUE), digits = 2), NA)
+    max <- ifelse(is.numeric(temp[[x]]), max(temp[[x]], na.rm = TRUE), NA)
+    min <- ifelse(is.numeric(temp[[x]]), min(temp[[x]], na.rm = TRUE), NA)
+    IQR <- ifelse(is.numeric(temp[[x]]), IQR(temp[[x]], na.rm =TRUE), NA)
+    levels <- length(unique(temp[[x]]))
+    c(Column=x,
+      Class=class(temp[[x]]),
+      Missing = sum(is.na(temp[[x]])),
+      Min = min,
+      Median = median,
+      Max = max,
+      Mean = mean,
+      SD = sd,
+      Variance = variance,
+      Unique_Values = as.integer(levels))
+
+  }))
+      x= list(Rows = number_of_rows, Columns = number_of_columns, Types = y)
+      DT::datatable(x$Types,
+                class = 'cell-border stripe',
+                selection=list(mode="multiple", target="row"),
+                rownames=FALSE,
+                options = list(scrollX = TRUE, autoWidth = FALSE)
+                )
+    })
+```
+
+#### 2. Proportion des individus qui ont churné
+Le graphique en camembert indique une proportion très déséquilibrée entre les classes de churn :
+- **Non-Churn** : Environ 99.8 % des individus.
+- **Churn** : Environ 0.2 % des individus.
+
+Cela montre un problème de déséquilibre de classe, qui est fréquent dans les jeux de données de churn ou de détection de fraude. Cela signifie que les techniques d'échantillonnage (comme le sur-échantillonnage des individus qui ont churné ou le sous-échantillonnage des individus qui n'ont pas churné) pourraient être nécessaires pour améliorer les performances des modèles de machine learning.
+
+```{r, echo=FALSE, message=FALSE}
+# Load ggplot2
+library(ggplot2)
+
+# Create the plot with text labels
+ggplot(data1, aes(x = Class)) +
+  geom_bar(aes(y = ..count..), fill = "skyblue") +
+  geom_text(stat = "count", aes(label = ..count..), 
+            vjust = -0.5, size = 5) +  # Adjust vjust for label position
+  labs(title = "Frequency of Classes", x = "Class", y = "Frequency") +
+  theme_minimal()
+```
+
+#### 3. Variables catégorielles
+Aucune variable catégorielle n'a été trouvée dans le jeu de données. Toutes les variables sont de type numérique.
+
+
+#### 3. Variables numériques
+Nous avons considérés uniquement les 3 variables les **plus** et les **moins** corrélées avec Class, et afficher leurs histogrammes correspondants.
+
+```{r, echo=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)                  # For pivot_longer
+library(ggplot2)
+library(DT)
+# Calculate correlations between numerical variables and the class
+importance <- data1 %>%
+  mutate(Class = as.numeric(as.factor(Class))) %>%
+  summarise(across(starts_with("V"), ~ abs(cor(.x, Class)))) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Correlation") %>%
+  arrange(desc(Correlation))
+
+# Display the correlation data using DT
+renderDataTable(
+  importance,
+  options = list(
+    pageLength = 15,  # Show 5 rows per page
+    autoWidth = TRUE  # Automatically adjust column widths
+  ),
+  rownames = FALSE  # Do not show row numbers
+)
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+top_variables <- importance %>%
+  top_n(3, Correlation) %>%
+  pull(Variable)
+
+top_variables
+# Reshape data for ggplot
+df_long <- data1 %>%
+  select(all_of(top_variables), Class) %>%
+  pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
+
+# Create histograms for top correlated variables colored by class
+# Filter out non-positive values
+ggplot(df_long, aes(x = Value, fill = as.factor(Class))) +
+  geom_histogram(
+                 alpha = 0.5, 
+                 drop=T) +
+  facet_wrap(~ Variable) +
+  labs(title = "Histograms of Top 3 Correlated Variables by Class",
+       x = "Value",
+       y = "Count",
+       fill = "Class") +
+  scale_y_log10() +  # Apply logarithmic scale to the y-axis
+  theme_minimal()
+
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+
+top_variables <- importance %>%
+   slice_min(order_by = Correlation, n = 3) %>%
+  pull(Variable)
+
+top_variables
+# Reshape data for ggplot
+df_long <- data1 %>%
+  select(all_of(top_variables), Class) %>%
+  pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
+
+# Create histograms for top correlated variables colored by class
+# Filter out non-positive values
+ggplot(df_long, aes(x = Value, fill = as.factor(Class))) +
+  geom_histogram(
+                 alpha = 0.5, 
+                 drop=T) +
+  facet_wrap(~ Variable) +
+  labs(title = "Histograms of Least 3 Correlated Variables by Class",
+       x = "Value",
+       y = "Count",
+       fill = "Class") +
+  scale_y_log10() +  # Apply logarithmic scale to the y-axis
+  theme_minimal()
+
+```
+
+#### 3. Analyse des variables numériques (histogrammes)
+L'analyse des distributions pour chaque variable numérique a révélé plusieurs points intéressants :
+
+- Certaines variables, comme **V12**, **V14**, et **V17**, n'affichent pas de distinction claire entre les distributions pour les deux groupes. Contrairement aux variables **V22**, **V23**, et **V25** qui montrent des différences significatives dans leurs distributions entre les individus qui ont churné et ceux qui ne l'ont pas fait.
+
+Ces observations suggèrent que certaines variables ont un pouvoir discriminant important pour séparer les individus churn et non-churn, et elles devront être priorisées lors de l'analyse.
+
+## 4. Matrice de corrélation des attributs
+L'examen de la matrice de corrélation a révélé les points suivants :
+
+- Les variables telles que **V10**, **V12**, **V14**, et **V17** montrent des corrélations modérées à fortes avec la variable `Class` (churn). Cela signifie que ces variables pourraient être des indicateurs importants du comportement de churn.
+- La plupart des autres variables montrent une faible ou aucune corrélation directe avec le churn, ce qui pourrait signifier qu'elles ont moins d'importance ou qu'elles interagissent avec d'autres variables de manière complexe.
+- Les corrélations entre les variables elles-mêmes montrent peu de redondance, ce qui est bénéfique pour la construction d'un modèle car cela réduit le risque de multicolinéarité.
+
+```{r, echo=FALSE, message=FALSE}
+
+    # Select only numeric variables from the dataset
+    numeric_vars <- data1 %>% select_if(is.numeric)
+
+    # Ensure there are at least two numeric columns to compute correlation
+        # Calculate the correlation matrix
+        correlation_matrix <- cor(numeric_vars, use = "complete.obs")
+
+        # Melt the correlation matrix into long format for ggplot
+        corr_melted <- reshape2::melt(correlation_matrix)
+
+        # Create the correlation matrix heatmap
+        corr_plot <- ggplot(corr_melted, aes(Var1, Var2, fill = value)) +
+            geom_tile(color = "white") +
+            scale_fill_gradient2(low = "red", high = "blue", mid = "white",
+                                 midpoint = 0, limit = c(-1, 1), space = "Lab",
+                                 name = "Correlation") +
+            #theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                             size = 12, hjust = 1),
+                  axis.text.y = element_text(size = 12)) +
+            coord_fixed() +
+            ggtitle("Correlation Matrix") +
+            theme(plot.title = element_text(face = "bold", color = "#2E8B57", size = 14, hjust = 0.5))
+    corr_plot
+```
+
+## B- Conclusions globales
+- **Attributs influents** : Les variables comme **V10**, **V12**, **V14**, et **V17** semblent jouer un rôle significatif dans la prédiction du churn. Elles méritent une attention particulière lors de la construction d'un modèle prédictif.
+- **Déséquilibre de classe** : Le jeu de données est fortement déséquilibré, avec une majorité écrasante d'individus qui n'ont pas churné. Cet aspect devra être traité pour éviter que les modèles de machine learning ne soient biaisés en faveur de la classe majoritaire.
+- **Stratégies d'amélioration** : Des techniques telles que l'ingénierie des caractéristiques, la sélection des variables, et la gestion du déséquilibre de classe seront cruciales pour obtenir des performances optimales dans les prédictions de churn.
+
+Ces conclusions fournissent une base solide pour construire un modèle prédictif en utilisant les variables identifiées et pour appliquer des stratégies spécifiques au déséquilibre de classe.
+
+# Prediction de Churn
+
+### Métriques
+
+En considérant uniquement les 4 variables les plus importantes soient: **V10**, **V12**, **V14**, et **V17**. Voici les résultats obtenus
+
+```{r, echo=FALSE, message=FALSE}
+library(knitr)
+library(kableExtra)
+
+# Create the data frame for performance metrics
+data <- data.frame(
+  `Data Approach` = c(rep("Data Brute", 4), rep("Undersampling", 4), rep("Oversampling", 4)),
+  Model = c("DT", "LG", "SVM", "SVM_RBF", "DT", "LG", "SVM", "SVM_RBF", "DT", "LG", "SVM", "SVM_RBF"),
+  `ROC Default` = c(0.74, 0.946, 0.95, 0.80, 0.8855, 0.96, 0.96, 0.96, 0.89, 0.91, 0.91, 0.97),
+  `ROC Grid` = c(0.79, 0.955, 0.96, 0.84, 0.886, 0.95, 0.96, 0.97, 0.89, 0.91, 0.92, 0.98)
+)
+
+# Create the table using kable and kableExtra
+kable(data, caption = "Prediction Results: Performance Metrics", booktabs = TRUE) %>%
+  kable_styling(full_width = TRUE, position = "center", font_size = 14) %>% # Set full width and increase font size
+  row_spec(0, bold = TRUE, color = "white") %>% # Header row styling
+  column_spec(1, bold = TRUE) %>% # Bold the first column (Data Approach)
+  collapse_rows(columns = 1, valign = "middle") %>% # Merge rows for Data Approach column
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+### Observations
+
+- Il semble que le modèle **SVM** offre les meilleures performances avec des valeurs élevées de **ROC** dans les trois approches de données.
+- Cependant, il est important de noter que les données sont fortement déséquilibrées, ce qui pourrait biaiser les performances du modèle.
+- Les résultats montrent que l'**oversampling** et l'**undersampling** améliorent considérablement les performances des modèles, avec des scores plus élevés en **ROC Grid** comparé à l'approche brute.
