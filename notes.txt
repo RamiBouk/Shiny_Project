@@ -1,0 +1,33 @@
+# no_balancing 
+dt: 0.79, 0.74
+lg; 0.944 0.955
+svm: 0.95=0.95
+svm_rbf: 0.80 0.84
+
+# over: 
+dt: 0.89 0.94
+lg: 0.917 0.916
+svm: 0.917 0.921
+svm_rbf: 0.80 0.85
+# under @s
+
+dt: 0.89 0.94
+lg: 0.92 0.92 
+svm rbf: 0.965 0.9713
+svm: 0.96 0.96
+
+
+
+- while the AUC results i best when not preforming under ande over
+	blancing we will investigate further the sensitivity and specificity
+	with different methods 
+not balancing:
+  Sensitivity : 0.9872          
+  Specificity : 0.7675
+
+under
+            Sensitivity : 0.8123          
+            Specificity : 0.8076
+over
+            Sensitivity : 0.8297          
+            Specificity : 0.8299     

@@ -1,0 +1,370 @@
+
+
+
+<div id="analyse-détaillée-du-nouveau-jeu-de-données"
+class="section level1">
+<h1>Analyse détaillée du nouveau jeu de données</h1>
+<div
+id="dimensions-du-jeu-de-données-valeurs-manquantes-et-attributs-constants"
+class="section level4">
+<h4>Dimensions du jeu de données, valeurs manquantes et attributs
+constants</h4>
+<ul>
+<li><strong>Dimensions</strong> : Le jeu de données contient 41 188
+lignes et 21 colonnes.</li>
+<li><strong>Valeurs manquantes</strong> : Certaines colonnes contiennent
+des valeurs manquantes :
+<ul>
+<li><code>job</code> : 330 valeurs manquantes</li>
+<li><code>marital</code> : 80 valeurs manquantes</li>
+<li><code>education</code> : 1 731 valeurs manquantes</li>
+<li><code>default</code> : 8 597 valeurs manquantes</li>
+<li><code>housing</code> et <code>loan</code> : 990 valeurs manquantes
+chacune</li>
+</ul>
+Ces valeurs manquantes doivent être traitées avant de construire un
+modèle prédictif, car elles pourraient introduire du biais ou réduire la
+précision du modèle.</li>
+<li><strong>Attributs constants</strong> : Aucun attribut constant n’a
+été identifié, ce qui signifie qu’aucune variable n’est triviale et
+toutes peuvent potentiellement apporter des informations.</li>
+</ul>
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="oute4c4ab09da893308" style="width:100%;height:auto;"></div>
+</div>
+<div id="proportion-des-individus-ayant-répondu-yes-ou-no"
+class="section level4">
+<h4>Proportion des individus ayant répondu “yes” ou “no”</h4>
+<p>Le graphique en bars indique une proportion déséquilibrée entre les
+réponses : - <strong>No</strong> : La majorité des individus, environ
+88.7 %, ont répondu “no”. - <strong>Yes</strong> : Environ 11.3 % des
+individus ont répondu “yes”.</p>
+<p>Ce déséquilibre de classe suggère qu’il faudra peut-être utiliser des
+techniques pour gérer les données déséquilibrées, comme le
+sur-échantillonnage de la classe minoritaire ou le sous-échantillonnage
+de la classe majoritaire, afin d’améliorer les performances des modèles
+de prédiction.</p>
+<p><img src="data2_report_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+</div>
+<div id="analyse-des-variables-catégorielles" class="section level3">
+<h3>Analyse des variables catégorielles</h3>
+<p><strong>La plupart des caractéristiques sont catégorielles, à
+l’exception des suivantes :</strong></p>
+<ul>
+<li><p><code>age</code></p></li>
+<li><p><code>duration</code></p></li>
+<li><p><code>euribor3m</code></p></li>
+<li><p><code>pdays</code></p></li>
+<li><p><code>cons.price.idx</code></p></li>
+<li><p><code>cons.conf.idx</code></p></li>
+<li><p><code>nr.employed</code></p></li>
+<li><p><code>campaign</code></p></li>
+<li><p>Pour évaluer l’importance des variables catégorielles, nous
+utiliserons le test du Chi-Carré. Plus la p-value est faible, plus la
+corrélation est élevée.</p></li>
+</ul>
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="out28723c602f04dfa0" style="width:100%;height:auto;"></div>
+<div id="valeurs-absolues" class="section level4">
+<h4>Valeurs Absolues</h4>
+<p><img src="data2_report_files/figure-html/unnamed-chunk-6-1.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-6-2.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-6-3.png" width="672" />
+#### Taux de Churn vs. Non-Churn
+<img src="data2_report_files/figure-html/unnamed-chunk-7-1.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-7-2.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-7-3.png" width="672" /></p>
+<ul>
+<li>Les graphiques de répartition montrent que certaines variables
+catégorielles présentent des différences significatives dans les
+proportions de “yes” et “no” :</li>
+<li><strong>emp.var.rate</strong>, <strong>month</strong>, et
+<strong>poutcome</strong> montrent des écarts clairs entre les
+proportions de “yes” et “no”, ce qui indique qu’elles sont probablement
+des prédicteurs importants pour déterminer la réponse cible.</li>
+</ul>
+</div>
+</div>
+<div id="analyse-des-variables-numériques" class="section level3">
+<h3>Analyse des variables numériques</h3>
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="out1892b95a45fe322c" style="width:100%;height:auto;"></div>
+<p><img src="data2_report_files/figure-html/unnamed-chunk-9-1.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-9-2.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-9-3.png" width="672" /></p>
+</div>
+<div id="matrice-de-corrélation-des-attributs" class="section level2">
+<h2>5. Matrice de corrélation des attributs</h2>
+<p>L’analyse de la matrice de corrélation met en évidence les points
+suivants : - Les variables telles que <strong>euribor3m</strong>,
+<strong>nr.employed</strong>, et <strong>emp.var.rate</strong>
+présentent des corrélations significatives entre elles ainsi qu’avec la
+variable cible, ce qui peut indiquer qu’elles sont étroitement liées au
+comportement observé dans les données. - Les faibles corrélations
+directes pour certaines autres variables suggèrent qu’elles ont moins
+d’impact isolé sur la variable cible ou qu’elles pourraient interagir de
+manière plus complexe avec d’autres variables.</p>
+<p><img src="data2_report_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+</div>
+<div id="b--conclusions-globales" class="section level2">
+<h2>B- Conclusions globales</h2>
+<ul>
+<li><strong>Variables influentes</strong> : Les variables comme
+<strong>duration</strong>, <strong>euribor3m</strong>,
+<strong>nr.employed</strong>, et certaines variables catégorielles comme
+<strong>emp.var.rates</strong>, <strong>month</strong>, et
+<strong>poutcome</strong> semblent jouer un rôle clé dans la prédiction
+de la réponse cible “yes”. Elles devraient être prioritaires dans
+l’élaboration d’un modèle de prédiction.</li>
+<li><strong>Déséquilibre de classe</strong> : Le déséquilibre de la
+classe cible (majorité de “no”) devra être traité avec des techniques
+adaptées pour améliorer les performances du modèle.</li>
+<li><strong>Stratégies d’amélioration</strong> : Des techniques
+d’ingénierie des caractéristiques, de sélection des variables et de
+gestion des valeurs manquantes seront essentielles pour obtenir des
+résultats optimaux lors de la construction du modèle prédictif.</li>
+</ul>
+<p>Ces conclusions fournissent une base solide pour aborder la
+modélisation prédictive de ce jeu de données en utilisant les variables
+et stratégies identifiées.</p>
+</div>
+</div>
+<div id="prediction-de-churn" class="section level1">
+<h1>Prediction de Churn</h1>
+<div id="métriques" class="section level3">
+<h3>Métriques</h3>
+<table class="table table table-striped table-hover table-condensed table-responsive" style="font-size: 14px; margin-left: auto; margin-right: auto; margin-left: auto; margin-right: auto;">
+<caption style="font-size: initial !important;">
+Prediction Results: Performance Metrics for Different Data Balancing
+Techniques
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;font-weight: bold;color: white !important;background-color: rgba(76, 175, 80, 255) !important;">
+Data.Approach
+</th>
+<th style="text-align:left;font-weight: bold;color: white !important;background-color: rgba(76, 175, 80, 255) !important;">
+Model
+</th>
+<th style="text-align:right;font-weight: bold;color: white !important;background-color: rgba(76, 175, 80, 255) !important;">
+ROC.Default
+</th>
+<th style="text-align:right;font-weight: bold;color: white !important;background-color: rgba(76, 175, 80, 255) !important;">
+ROC.Grid
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;font-weight: bold;vertical-align: middle !important;" rowspan="4">
+No Balancing
+</td>
+<td style="text-align:left;">
+DT
+</td>
+<td style="text-align:right;">
+0.72
+</td>
+<td style="text-align:right;">
+0.84
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+LG
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SVM
+</td>
+<td style="text-align:right;">
+0.93
+</td>
+<td style="text-align:right;">
+0.92
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SVM_RBF
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+</tr>
+<tr>
+<td style="text-align:left;font-weight: bold;vertical-align: middle !important;" rowspan="4">
+Undersampling
+</td>
+<td style="text-align:left;">
+DT
+</td>
+<td style="text-align:right;">
+0.72
+</td>
+<td style="text-align:right;">
+0.84
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+LG
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+<td style="text-align:right;">
+0.92
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SVM
+</td>
+<td style="text-align:right;">
+0.93
+</td>
+<td style="text-align:right;">
+0.93
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SVM_RBF
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+</tr>
+<tr>
+<td style="text-align:left;font-weight: bold;vertical-align: middle !important;" rowspan="4">
+Oversampling
+</td>
+<td style="text-align:left;">
+DT
+</td>
+<td style="text-align:right;">
+0.80
+</td>
+<td style="text-align:right;">
+0.87
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+LG
+</td>
+<td style="text-align:right;">
+0.88
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SVM
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+<td style="text-align:right;">
+0.92
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SVM_RBF
+</td>
+<td style="text-align:right;">
+0.94
+</td>
+<td style="text-align:right;">
+0.96
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="observations" class="section level3">
+<h3>Observations</h3>
+<ul>
+<li><strong>No Balancing:</strong>
+<ul>
+<li>The SVM model shows the highest performance with <strong>ROC
+Default</strong> at 0.93, although its <strong>ROC Grid</strong>
+slightly decreases to 0.92.</li>
+<li>LG and SVM_RBF models have relatively similar performance, but
+SVM_RBF shows slightly better results in the <strong>ROC
+Grid</strong>.</li>
+</ul></li>
+<li><strong>Undersampling:</strong>
+<ul>
+<li>The SVM model maintains its strong performance with both <strong>ROC
+Default</strong> and <strong>ROC Grid</strong> at 0.93, indicating its
+stability in undersampled data.</li>
+<li>LG shows a slight improvement in <strong>ROC Grid</strong> compared
+to the default, suggesting that grid tuning enhances its predictive
+capabilities.</li>
+</ul></li>
+<li><strong>Oversampling:</strong>
+<ul>
+<li>SVM_RBF model stands out with the best performance, achieving
+<strong>ROC Default</strong> of 0.94 and <strong>ROC Grid</strong> of
+0.96, which makes it the most suitable model in oversampled
+conditions.</li>
+<li>Decision Tree (DT) shows significant improvement in <strong>ROC
+Grid</strong> with oversampling compared to no balancing, indicating
+that it benefits from the increased dataset size.</li>
+</ul></li>
+</ul>
+<div style="display: flex; justify-content: space-between;">
+<div style="flex: 1; text-align: center;">
+<div class="float">
+<img
+src="data/figures/DATA2/under/SVM_RBF1.png"
+alt="Courbe ROC (SVM RBF avec Undersampling)" />
+<div class="figcaption">Courbe ROC (SVM RBF avec Undersampling)</div>
+</div>
+<p>
+<strong>Oversampling with Default Paramters</strong>
+</p>
+</div>
+<div style="flex: 1; text-align: center;">
+<div class="float">
+<img src="data/figures/DATA2/over/SVM_RBF1.png"
+alt="Courbe ROC (SVM RBF avec Oversampling)" />
+<div class="figcaption">Courbe ROC (SVM RBF avec Oversampling)</div>
+</div>
+<p>
+<strong>Oversampling with Grid Search</strong>
+</p>
+</div>
+</div>
+</div>
+<div id="general-observations" class="section level3">
+<h3>General Observations</h3>
+<ul>
+<li><strong>SVM Models Performance:</strong> SVM and SVM_RBF
+consistently outperform other models across all data balancing
+techniques, with SVM_RBF showing particularly strong results in
+oversampling.</li>
+<li><strong>Data Balancing Impact:</strong> Both undersampling and
+oversampling techniques generally improve the performance of the models,
+with oversampling showing the most consistent increase in <strong>ROC
+Grid</strong> values.</li>
+<li><strong>Model Stability:</strong> Decision Tree models have lower
+ROC scores compared to SVM models but show significant improvement when
+tuning is applied and when data balancing is used.</li>
+</ul>
+<p>These findings suggest that <strong>SVM models</strong> (especially
+SVM_RBF) offer the best predictive performance, particularly when the
+data is balanced using oversampling. Balancing techniques are crucial in
+enhancing model accuracy, especially in scenarios with imbalanced
+datasets.</p>
+</div>
+</div>

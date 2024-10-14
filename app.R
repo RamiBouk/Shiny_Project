@@ -13,7 +13,7 @@ packages_to_install <- c("shiny","shinyjs", "ggplot2","editData",
                          "shinythemes", "ggcorrplot", "e1071", "caret", 
                          "randomForest", "rlang", "pROC", "Rtsne", 
                          "xgboost", "gbm","virdis","ROSE","caret","bslib",
-                         "plotly","rmarkdown","knitr",'kableXxtra'
+                         "plotly","rmarkdown","knitr",'kableXxtra','reshape2'
                         )
 
 # Installation des packages s'ils ne sont pas déjà installés
@@ -49,7 +49,7 @@ library(caret)
 library(bslib)
 library(plotly)
 library(knitr)
-
+library(reshape2)
 
 
 
@@ -84,12 +84,12 @@ ui <- shinyUI(
   ),
   tabPanel("Report",id ="tab3",
          tabsetPanel(
-           tabPanel("data1",
+           tabPanel("Credit fraud",
                     htmlOutput("report1")),  # Ajout d'un plot pour la courbe ROC
-           tabPanel("data2",
+           tabPanel("Bank marketing",
                     htmlOutput("report2")),
 
-           tabPanel("data3",
+           tabPanel("Employee attrition",
                     htmlOutput('report3')),
          )
   ),
@@ -282,18 +282,35 @@ ui <- shinyUI(
 
 # Fonction serveur
 server <- function(input, output, session) {
-
-  # Function to render the R Markdown files
+  # Precompile the HTML files if they don't exist
+  if (!file.exists("data1_report.html")) {
+    rmarkdown::render("data1_report.rmd", output_file = "data1_report.html", 
+                      output_options = list(self_contained = FALSE, fragment.only = TRUE))
+  }
+  
+  if (!file.exists("data2_report.html")) {
+    rmarkdown::render("data2_report.rmd", output_file = "data2_report.html", 
+                      output_options = list(self_contained =FALSE, fragment.only = TRUE))
+  }
+  
+  if (!file.exists("data3_report.html")) {
+    rmarkdown::render("data3_report.rmd", output_file = "data3_report.html", 
+                      output_options = list(self_contained = FALSE, fragment.only = TRUE))
+  }
+  
+  # Function to render the precompiled HTML files
   output$report1 <- renderUI({
-    HTML(markdown::markdownToHTML(knit('data1_report.rmd'),fragment.only=T))
+    includeHTML("data1_report.html")
   })
+  
   output$report2 <- renderUI({
-    HTML(markdown::markdownToHTML(knit('data2_report.rmd'),fragment.only=T))
+    includeHTML("data2_report.html")
   })
+  
   output$report3 <- renderUI({
-    HTML(markdown::markdownToHTML(knit('data3_report.rmd'),fragment.only=T))
+    includeHTML("data3_report.html")
   })
-
+    
   # Initialisation des valeurs réactives
   rawData <- reactiveVal()
   processedData <- reactiveVal(NULL)

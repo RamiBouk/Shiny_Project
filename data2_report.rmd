@@ -1,18 +1,16 @@
 ---
-title: "Report on Data 1"
-output: html_document
+title: "Bank Marketing"
+output: html_fragment 
 ---
 
-```{R, echo=FALSE}
-#data2 <- read.csv('data/creditcard_original.csv')
-
-data2 <- read.csv('./data/bank-additional-full.csv',
+```{r, echo=FALSE}
+data2 <- read.csv('data/bank-additional-full.csv',
                   na.strings = c("", "NA", "?","unknown",'999'))
 ```
 
 # Analyse détaillée du nouveau jeu de données
 
-#### 1. Dimensions du jeu de données, valeurs manquantes et attributs constants
+#### Dimensions du jeu de données, valeurs manquantes et attributs constants
 - **Dimensions** : Le jeu de données contient 41 188 lignes et 21 colonnes.
 - **Valeurs manquantes** : Certaines colonnes contiennent des valeurs manquantes :
   - `job` : 330 valeurs manquantes
@@ -23,10 +21,6 @@ data2 <- read.csv('./data/bank-additional-full.csv',
 
   Ces valeurs manquantes doivent être traitées avant de construire un modèle prédictif, car elles pourraient introduire du biais ou réduire la précision du modèle.
 - **Attributs constants** : Aucun attribut constant n'a été identifié, ce qui signifie qu'aucune variable n'est triviale et toutes peuvent potentiellement apporter des informations.
-
-```{r, echo=FALSE}
-cat(dim(data2))
-```
 
 ```{r, echo=FALSE}
 # Display the table using knitr::kable() and center it
@@ -66,7 +60,7 @@ library(kableExtra)
   )
 ```
 
-#### 2. Proportion des individus ayant répondu "yes" ou "no"
+#### Proportion des individus ayant répondu "yes" ou "no"
 Le graphique en bars indique une proportion déséquilibrée entre les réponses :
 - **No** : La majorité des individus, environ 88.7 %, ont répondu "no".
 - **Yes** : Environ 11.3 % des individus ont répondu "yes".
@@ -87,6 +81,7 @@ ggplot(data2, aes(x = y)) +
   theme_minimal()
 ```
 
+###  Analyse des variables catégorielles
 **La plupart des caractéristiques sont catégorielles, à l'exception des suivantes :**
 
 - `age`
@@ -108,11 +103,12 @@ data2 <- data2 %>%
   mutate(across(.cols = -all_of(numeric_columns), ~ as.factor(.)))
 ```
 
-- Considérons uniquement les variables les **plus** et **moins importantes**: 
-
-```{r, echo=FALSE, message=FALSE,warning=FALSE}
+- Pour évaluer l'importance des variables catégorielles,
+  nous utiliserons le test du Chi-Carré.
+  Plus la p-value est faible, plus la corrélation est élevée.
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
 # Set the minimum count threshold for each level
-min_count_threshold <- 5
+min_count_threshold <-5 
 
 # Function to check if a variable has enough observations per level
 has_enough_levels <- function(variable, threshold) {
@@ -149,7 +145,7 @@ renderDataTable(
 )
 ```
 
-#### Top 3 
+#### Valeurs Absolues
 ```{r, echo=FALSE, message=FALSE}
 library(ggplot2)
 library(dplyr)
@@ -182,7 +178,7 @@ for (var in top3_variables) {
   print(p)  # Ensure each plot is printed during the loop
 }
 ```
-#### Top 3 rates 
+#### Taux de Churn vs. Non-Churn
 ```{r, echo=FALSE, message=FALSE}
 
 library(ggplot2)
@@ -221,11 +217,10 @@ for (var in top3_variables) {
 }
 ```
 
-## 3. Analyse des variables catégorielles
-Les graphiques de répartition montrent que certaines variables catégorielles présentent des différences significatives dans les proportions de "yes" et "no" :
+- Les graphiques de répartition montrent que certaines variables catégorielles présentent des différences significatives dans les proportions de "yes" et "no" :
 - **emp.var.rate**, **month**, et **poutcome** montrent des écarts clairs entre les proportions de "yes" et "no", ce qui indique qu'elles sont probablement des prédicteurs importants pour déterminer la réponse cible.
 
-### 3. Analyse des variables numériques 
+### Analyse des variables numériques 
 ```{r, echo=FALSE, message=FALSE}
 library(dplyr)
 library(tidyr)                  # For pivot_longer
@@ -238,11 +233,11 @@ importance <- data2 %>%
   # Apply cor() only to numeric columns, calculating correlation with 'y'
   summarise(across(where(is.numeric), ~ abs(cor(.x, y, use = "complete.obs")))) %>%
   # Pivot to long format for better readability and sorting
-  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Correlation") %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "abs_Correlation") %>%
   # Remove the correlation of 'y' with itself
   filter(Variable != "y") %>%
   # Sort the variables by correlation in descending order
-  arrange(desc(Correlation))
+  arrange(desc(abs_Correlation))
 
 # Display the correlation data using DT
 renderDataTable(
@@ -254,10 +249,9 @@ renderDataTable(
   rownames = FALSE  # Do not show row numbers
 )
 ```
-#### 3 variables with least 'count'
 ```{r, echo=FALSE, message=FALSE,warning=FALSE}
 top_variables <- importance %>%
-   slice_min(order_by = Correlation, n = 3) %>%
+   slice_min(order_by = abs_Correlation, n = 3) %>%
   pull(Variable)
 
 # Reshape data for ggplot
@@ -266,7 +260,7 @@ df_long <- data2 %>%
   pivot_longer(cols = all_of(top_variables), names_to = "Variable", values_to = "Value")
 
 top_variables <- importance %>%
-   slice_min(order_by = Correlation, n = 3) %>%
+   slice_min(order_by = abs_Correlation, n = 3) %>%
   pull(Variable)
 
 # Create separate plots for each variable
@@ -363,6 +357,24 @@ kable(new_data, caption = "Prediction Results: Performance Metrics for Different
 - **Oversampling:**
   - SVM_RBF model stands out with the best performance, achieving **ROC Default** of 0.94 and **ROC Grid** of 0.96, which makes it the most suitable model in oversampled conditions.
   - Decision Tree (DT) shows significant improvement in **ROC Grid** with oversampling compared to no balancing, indicating that it benefits from the increased dataset size.
+
+
+<div style="display: flex; justify-content: space-between;">
+
+<div style="flex: 1; text-align: center;">
+  
+  ![Courbe ROC (SVM RBF avec Undersampling)](/home/rami/Shiny_Project/data/figures/DATA2/under/SVM_RBF1.png)
+  <p><strong>Oversampling with Default Paramters</strong></p>
+  
+</div>
+<div style="flex: 1; text-align: center;">
+  
+  ![Courbe ROC (SVM RBF avec Oversampling)](/home/rami/Shiny_Project/data/figures/DATA2/over/SVM_RBF1.png)
+  <p><strong>Oversampling with Grid Search</strong></p>
+  
+</div>
+
+</div>
 
 ### General Observations
 
