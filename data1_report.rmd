@@ -324,7 +324,6 @@ kable(data,
 - Les courbes ROC suivantes comparent les performances du modèle 
   SVM RBF avec les paramètres par défaut et ceux obtenus par recherche par grille (grid search).
 <div style="display: flex; justify-content: space-between;">
-
 <div style="flex: 1; text-align: center;">
   
   ![Courbe ROC (SVM RBF avec Undersampling)](data/figures/DATA1/under/SVM_RBF2.png)

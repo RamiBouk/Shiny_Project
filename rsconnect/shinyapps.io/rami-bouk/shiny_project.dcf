@@ -5,6 +5,6 @@ account: rami-bouk
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 10983674
-bundleId: 8169990
+bundleId: 9220911
 url: https://rami-bouk.shinyapps.io/shiny_project/
 version: 1

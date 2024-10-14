@@ -353,22 +353,24 @@ kable(new_data, caption = "Prediction Results: Performance Metrics for Different
 - **Oversampling:**
   - **SVM_RBF** once again outperforms other models with a **ROC Grid** score of 0.82, highlighting its ability to leverage larger datasets effectively.
   - The **LG** and **DT** models experience slight drops in performance with oversampling, which may indicate sensitivity to data balancing techniques.
+
 <div style="display: flex; justify-content: space-between;">
 
 <div style="flex: 1; text-align: center;">
   
-  ![Courbe ROC (SVM RBF avec Undersampling)](/home/rami/Shiny_Project/data/figures/DATA3/SVM_RBF2.png)
+  ![Courbe ROC (SVM RBF avec Undersampling)](data/figures/DATA3/SVM_RBF2.png)
   <p><strong>Undersampling with Default Paramters</strong></p>
   
 </div>
 <div style="flex: 1; text-align: center;">
   
-  ![Courbe ROC (SVM RBF avec Oversampling)](/home/rami/Shiny_Project/data/figures/DATA3/SVM_RBF2.png)
+  ![Courbe ROC (SVM RBF avec Oversampling)](data/figures/DATA3/SVM_RBF2.png)
   <p><strong>Undersampling with Grid Search</strong></p>
   
 </div>
 
 </div>
+
 
 #### Évaluation de la Sensibilité et de la Spécificité
 

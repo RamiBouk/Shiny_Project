@@ -345,41 +345,38 @@ kable(new_data, caption = "Prediction Results: Performance Metrics for Different
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 ### Observations
+Pas d'équilibrage :
 
-- **No Balancing:** 
-  - The SVM model shows the highest performance with **ROC Default** at 0.93, although its **ROC Grid** slightly decreases to 0.92.
-  - LG and SVM_RBF models have relatively similar performance, but SVM_RBF shows slightly better results in the **ROC Grid**.
+- Le modèle SVM montre la meilleure performance avec ROC Default à 0,93, bien que son ROC Grid diminue légèrement à 0,92.
+- Les modèles LG et SVM_RBF ont des performances relativement similaires, mais SVM_RBF montre des résultats légèrement meilleurs dans le ROC Grid.
+Sous-échantillonnage :
 
-- **Undersampling:**
-  - The SVM model maintains its strong performance with both **ROC Default** and **ROC Grid** at 0.93, indicating its stability in undersampled data.
-  - LG shows a slight improvement in **ROC Grid** compared to the default, suggesting that grid tuning enhances its predictive capabilities.
+- Le modèle SVM maintient sa forte performance avec ROC Default et ROC Grid à 0,93, indiquant sa stabilité avec des données sous-échantillonnées.
+-  LG montre une légère amélioration dans le ROC Grid par rapport au modèle par défaut, suggérant que l'ajustement de la grille améliore ses capacités prédictives.
+Sur-échantillonnage :
 
-- **Oversampling:**
-  - SVM_RBF model stands out with the best performance, achieving **ROC Default** of 0.94 and **ROC Grid** of 0.96, which makes it the most suitable model in oversampled conditions.
-  - Decision Tree (DT) shows significant improvement in **ROC Grid** with oversampling compared to no balancing, indicating that it benefits from the increased dataset size.
-
+- Le modèle SVM_RBF se distingue avec la meilleure performance, atteignant un ROC Default de 0,94 et un ROC Grid de 0,96, ce qui en fait le modèle le plus adapté dans des conditions de sur-échantillonnage.
+- L'arbre de décision (DT) montre une amélioration significative dans le ROC Grid avec le sur-échantillonnage par rapport à l'absence d'équilibrage, indiquant qu'il bénéficie de l'augmentation de la taille de l'ensemble de données.
 
 <div style="display: flex; justify-content: space-between;">
 
 <div style="flex: 1; text-align: center;">
   
-  ![Courbe ROC (SVM RBF avec Undersampling)](/home/rami/Shiny_Project/data/figures/DATA2/under/SVM_RBF1.png)
+  ![Courbe ROC (SVM RBF avec Undersampling)](data/figures/DATA2/under/SVM_RBF1.png)
   <p><strong>Oversampling with Default Paramters</strong></p>
   
 </div>
 <div style="flex: 1; text-align: center;">
   
-  ![Courbe ROC (SVM RBF avec Oversampling)](/home/rami/Shiny_Project/data/figures/DATA2/over/SVM_RBF1.png)
+  ![Courbe ROC (SVM RBF avec Oversampling)](data/figures/DATA2/over/SVM_RBF1.png)
   <p><strong>Oversampling with Grid Search</strong></p>
   
 </div>
 
 </div>
 
-### General Observations
-
-- **SVM Models Performance:** SVM and SVM_RBF consistently outperform other models across all data balancing techniques, with SVM_RBF showing particularly strong results in oversampling.
-- **Data Balancing Impact:** Both undersampling and oversampling techniques generally improve the performance of the models, with oversampling showing the most consistent increase in **ROC Grid** values.
-- **Model Stability:** Decision Tree models have lower ROC scores compared to SVM models but show significant improvement when tuning is applied and when data balancing is used.
-
-These findings suggest that **SVM models** (especially SVM_RBF) offer the best predictive performance, particularly when the data is balanced using oversampling. Balancing techniques are crucial in enhancing model accuracy, especially in scenarios with imbalanced datasets.
+### Observations Générales
+- Performance des Modèles SVM : Les modèles SVM et SVM_RBF surpassent systématiquement les autres modèles à travers toutes les techniques d'équilibrage des données, SVM_RBF montrant des résultats particulièrement solides en sur-échantillonnage.
+- Impact de l'Équilibrage des Données : Les techniques de sous-échantillonnage et de sur-échantillonnage améliorent généralement la performance des modèles, le sur-échantillonnage montrant l'augmentation la plus cohérente des valeurs ROC Grid.
+- Stabilité du Modèle : Les modèles d'arbre de décision ont des scores ROC inférieurs par rapport aux modèles SVM, mais montrent une amélioration significative lorsqu'un réglage est appliqué et lorsque l'équilibrage des données est utilisé.
+- Ces résultats suggèrent que les modèles SVM (en particulier SVM_RBF) offrent la meilleure performance prédictive, notamment lorsque les données sont équilibrées par sur-échantillonnage. Les techniques d'équilibrage sont cruciales pour améliorer la précision du modèle, en particulier dans des scénarios avec des ensembles de données déséquilibrés.

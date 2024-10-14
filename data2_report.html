@@ -29,7 +29,7 @@ précision du modèle.</li>
 été identifié, ce qui signifie qu’aucune variable n’est triviale et
 toutes peuvent potentiellement apporter des informations.</li>
 </ul>
-<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="oute4c4ab09da893308" style="width:100%;height:auto;"></div>
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="out525073b4eac0e35e" style="width:100%;height:auto;"></div>
 </div>
 <div id="proportion-des-individus-ayant-répondu-yes-ou-no"
 class="section level4">
@@ -62,7 +62,7 @@ l’exception des suivantes :</strong></p>
 utiliserons le test du Chi-Carré. Plus la p-value est faible, plus la
 corrélation est élevée.</p></li>
 </ul>
-<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="out28723c602f04dfa0" style="width:100%;height:auto;"></div>
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="outbac8ec8a41cb9590" style="width:100%;height:auto;"></div>
 <div id="valeurs-absolues" class="section level4">
 <h4>Valeurs Absolues</h4>
 <p><img src="data2_report_files/figure-html/unnamed-chunk-6-1.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-6-2.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-6-3.png" width="672" />
@@ -81,7 +81,7 @@ des prédicteurs importants pour déterminer la réponse cible.</li>
 </div>
 <div id="analyse-des-variables-numériques" class="section level3">
 <h3>Analyse des variables numériques</h3>
-<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="out1892b95a45fe322c" style="width:100%;height:auto;"></div>
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item-overflow-hidden html-fill-item" id="out8925d47e663b57df" style="width:100%;height:auto;"></div>
 <p><img src="data2_report_files/figure-html/unnamed-chunk-9-1.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-9-2.png" width="672" /><img src="data2_report_files/figure-html/unnamed-chunk-9-3.png" width="672" /></p>
 </div>
 <div id="matrice-de-corrélation-des-attributs" class="section level2">
@@ -292,41 +292,32 @@ SVM_RBF
 </div>
 <div id="observations" class="section level3">
 <h3>Observations</h3>
+<p>Pas d’équilibrage :</p>
 <ul>
-<li><strong>No Balancing:</strong>
-<ul>
-<li>The SVM model shows the highest performance with <strong>ROC
-Default</strong> at 0.93, although its <strong>ROC Grid</strong>
-slightly decreases to 0.92.</li>
-<li>LG and SVM_RBF models have relatively similar performance, but
-SVM_RBF shows slightly better results in the <strong>ROC
-Grid</strong>.</li>
-</ul></li>
-<li><strong>Undersampling:</strong>
-<ul>
-<li>The SVM model maintains its strong performance with both <strong>ROC
-Default</strong> and <strong>ROC Grid</strong> at 0.93, indicating its
-stability in undersampled data.</li>
-<li>LG shows a slight improvement in <strong>ROC Grid</strong> compared
-to the default, suggesting that grid tuning enhances its predictive
-capabilities.</li>
-</ul></li>
-<li><strong>Oversampling:</strong>
-<ul>
-<li>SVM_RBF model stands out with the best performance, achieving
-<strong>ROC Default</strong> of 0.94 and <strong>ROC Grid</strong> of
-0.96, which makes it the most suitable model in oversampled
-conditions.</li>
-<li>Decision Tree (DT) shows significant improvement in <strong>ROC
-Grid</strong> with oversampling compared to no balancing, indicating
-that it benefits from the increased dataset size.</li>
-</ul></li>
+<li><p>Le modèle SVM montre la meilleure performance avec ROC Default à
+0,93, bien que son ROC Grid diminue légèrement à 0,92.</p></li>
+<li><p>Les modèles LG et SVM_RBF ont des performances relativement
+similaires, mais SVM_RBF montre des résultats légèrement meilleurs dans
+le ROC Grid. Sous-échantillonnage :</p></li>
+<li><p>Le modèle SVM maintient sa forte performance avec ROC Default et
+ROC Grid à 0,93, indiquant sa stabilité avec des données
+sous-échantillonnées.</p></li>
+<li><p>LG montre une légère amélioration dans le ROC Grid par rapport au
+modèle par défaut, suggérant que l’ajustement de la grille améliore ses
+capacités prédictives. Sur-échantillonnage :</p></li>
+<li><p>Le modèle SVM_RBF se distingue avec la meilleure performance,
+atteignant un ROC Default de 0,94 et un ROC Grid de 0,96, ce qui en fait
+le modèle le plus adapté dans des conditions de
+sur-échantillonnage.</p></li>
+<li><p>L’arbre de décision (DT) montre une amélioration significative
+dans le ROC Grid avec le sur-échantillonnage par rapport à l’absence
+d’équilibrage, indiquant qu’il bénéficie de l’augmentation de la taille
+de l’ensemble de données.</p></li>
 </ul>
 <div style="display: flex; justify-content: space-between;">
 <div style="flex: 1; text-align: center;">
 <div class="float">
-<img
-src="data/figures/DATA2/under/SVM_RBF1.png"
+<img src="data/figures/DATA2/under/SVM_RBF1.png"
 alt="Courbe ROC (SVM RBF avec Undersampling)" />
 <div class="figcaption">Courbe ROC (SVM RBF avec Undersampling)</div>
 </div>
@@ -346,25 +337,27 @@ alt="Courbe ROC (SVM RBF avec Oversampling)" />
 </div>
 </div>
 </div>
-<div id="general-observations" class="section level3">
-<h3>General Observations</h3>
+<div id="observations-générales" class="section level3">
+<h3>Observations Générales</h3>
 <ul>
-<li><strong>SVM Models Performance:</strong> SVM and SVM_RBF
-consistently outperform other models across all data balancing
-techniques, with SVM_RBF showing particularly strong results in
-oversampling.</li>
-<li><strong>Data Balancing Impact:</strong> Both undersampling and
-oversampling techniques generally improve the performance of the models,
-with oversampling showing the most consistent increase in <strong>ROC
-Grid</strong> values.</li>
-<li><strong>Model Stability:</strong> Decision Tree models have lower
-ROC scores compared to SVM models but show significant improvement when
-tuning is applied and when data balancing is used.</li>
+<li>Performance des Modèles SVM : Les modèles SVM et SVM_RBF surpassent
+systématiquement les autres modèles à travers toutes les techniques
+d’équilibrage des données, SVM_RBF montrant des résultats
+particulièrement solides en sur-échantillonnage.</li>
+<li>Impact de l’Équilibrage des Données : Les techniques de
+sous-échantillonnage et de sur-échantillonnage améliorent généralement
+la performance des modèles, le sur-échantillonnage montrant
+l’augmentation la plus cohérente des valeurs ROC Grid.</li>
+<li>Stabilité du Modèle : Les modèles d’arbre de décision ont des scores
+ROC inférieurs par rapport aux modèles SVM, mais montrent une
+amélioration significative lorsqu’un réglage est appliqué et lorsque
+l’équilibrage des données est utilisé.</li>
+<li>Ces résultats suggèrent que les modèles SVM (en particulier SVM_RBF)
+offrent la meilleure performance prédictive, notamment lorsque les
+données sont équilibrées par sur-échantillonnage. Les techniques
+d’équilibrage sont cruciales pour améliorer la précision du modèle, en
+particulier dans des scénarios avec des ensembles de données
+déséquilibrés.</li>
 </ul>
-<p>These findings suggest that <strong>SVM models</strong> (especially
-SVM_RBF) offer the best predictive performance, particularly when the
-data is balanced using oversampling. Balancing techniques are crucial in
-enhancing model accuracy, especially in scenarios with imbalanced
-datasets.</p>
 </div>
 </div>
